@@ -163,14 +163,18 @@ button.desktop-explorer {
   & div > a {
     color: var(--secondary);
     font-family: var(--headerFont);
-    font-size: 0.95rem;
-    font-weight: $semiBoldWeight;
+    font-weight: var(--explorer-folder-font-weight, $semiBoldWeight);
     line-height: 1.5rem;
     display: inline-block;
+    padding: var(--explorer-folder-padding, 0);
+    border-radius: var(--explorer-folder-border-radius, 0);
+    margin-bottom: var(--explorer-item-spacing, 0);
+    transition: background-color 0.2s ease;
   }
 
   & div > a:hover {
     color: var(--tertiary);
+    background-color: var(--explorer-folder-bg-hover, transparent);
   }
 
   & div > button {
@@ -184,15 +188,23 @@ button.desktop-explorer {
     display: flex;
     align-items: center;
     font-family: var(--headerFont);
+    margin-bottom: var(--explorer-item-spacing, 0);
 
     & span {
-      font-size: 0.95rem;
       display: inline-block;
       color: var(--secondary);
-      font-weight: $semiBoldWeight;
+      font-weight: var(--explorer-folder-font-weight, $semiBoldWeight);
       margin: 0;
       line-height: 1.5rem;
       pointer-events: none;
+      padding: var(--explorer-folder-padding, 0);
+      border-radius: var(--explorer-folder-border-radius, 0);
+      transition: background-color 0.2s ease;
+    }
+    
+    &:hover span {
+      background-color: var(--explorer-folder-bg-hover, transparent);
+      color: var(--tertiary);
     }
   }
 }
