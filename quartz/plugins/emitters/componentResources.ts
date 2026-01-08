@@ -18,6 +18,8 @@ import {
 import { Features, transform } from "lightningcss"
 import { transform as transpile } from "esbuild"
 import { write } from "./helpers"
+import { readFileSync, existsSync } from "fs"
+import { resolve } from "path"
 
 type ComponentResources = {
   css: string[]
@@ -280,41 +282,71 @@ export const ComponentResources: QuartzEmitterPlugin = () => {
       } else if (cfg.theme.fontOrigin === "googleFonts" && !cfg.theme.cdnCaching) {
         // when cdnCaching is true, we link to google fonts in Head.tsx
         const theme = ctx.cfg.configuration.theme
-        const response = await fetch(googleFontHref(theme))
-        googleFontsStyleSheet = await response.text()
-
-        if (theme.typography.title) {
-          const title = ctx.cfg.configuration.pageTitle
-          const response = await fetch(googleFontSubsetHref(theme, title))
-          googleFontsStyleSheet += `\n${await response.text()}`
-        }
-
-        if (!cfg.baseUrl) {
-          throw new Error(
-            "baseUrl must be defined when using Google Fonts without cfg.theme.cdnCaching",
-          )
-        }
-
-        const { processedStylesheet, fontFiles } = await processGoogleFonts(
-          googleFontsStyleSheet,
-          cfg.baseUrl,
-        )
-        googleFontsStyleSheet = processedStylesheet
-
-        // Download and save font files
-        for (const fontFile of fontFiles) {
-          const res = await fetch(fontFile.url)
-          if (!res.ok) {
-            throw new Error(`Failed to fetch font ${fontFile.filename}`)
+        
+        // 尝试从本地加载字体样式表（离线模式）
+        // 使用相对于项目根目录的路径
+        const localFontsCssPath = resolve("quartz/static/fonts.css")
+        
+        if (existsSync(localFontsCssPath)) {
+          try {
+            googleFontsStyleSheet = readFileSync(localFontsCssPath, "utf-8")
+            console.log("使用本地字体样式表（离线模式）")
+            // 注意：本地模式下字体文件需要通过 Static 插件自动复制到 public/static/fonts/
+          } catch (readError) {
+            console.log(`读取本地字体样式表失败: ${readError}, 将尝试在线获取...`)
+            // 如果本地文件读取失败，继续尝试在线获取
           }
+        }
+        
+        // 如果本地文件不存在或读取失败，尝试在线获取
+        if (!googleFontsStyleSheet) {
+          console.log("本地字体样式表不可用，尝试在线获取...")
+          try {
+            const response = await fetch(googleFontHref(theme))
+            googleFontsStyleSheet = await response.text()
 
-          const buf = await res.arrayBuffer()
-          yield write({
-            ctx,
-            slug: joinSegments("static", "fonts", fontFile.filename) as FullSlug,
-            ext: `.${fontFile.extension}`,
-            content: Buffer.from(buf),
-          })
+            if (theme.typography.title) {
+              const title = ctx.cfg.configuration.pageTitle
+              const response = await fetch(googleFontSubsetHref(theme, title))
+              googleFontsStyleSheet += `\n${await response.text()}`
+            }
+
+            if (!cfg.baseUrl) {
+              throw new Error(
+                "baseUrl must be defined when using Google Fonts without cfg.theme.cdnCaching",
+              )
+            }
+
+            const { processedStylesheet, fontFiles } = await processGoogleFonts(
+              googleFontsStyleSheet,
+              cfg.baseUrl,
+            )
+            googleFontsStyleSheet = processedStylesheet
+
+            // Download and save font files
+            for (const fontFile of fontFiles) {
+              const res = await fetch(fontFile.url)
+              if (!res.ok) {
+                throw new Error(`Failed to fetch font ${fontFile.filename}`)
+              }
+
+              const buf = await res.arrayBuffer()
+              yield write({
+                ctx,
+                slug: joinSegments("static", "fonts", fontFile.filename) as FullSlug,
+                ext: `.${fontFile.extension}`,
+                content: Buffer.from(buf),
+              })
+            }
+          } catch (fetchError) {
+            throw new Error(
+              `无法加载 Google Fonts（离线环境）。请确保:\n` +
+              `1. 字体样式表存在: quartz/static/fonts.css\n` +
+              `2. 字体文件已下载到: quartz/static/ 目录（会自动复制到 public/static/fonts/）\n` +
+              `3. 或者在联网环境下构建以自动下载字体\n` +
+              `原始错误: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
+            )
+          }
         }
       }
 
