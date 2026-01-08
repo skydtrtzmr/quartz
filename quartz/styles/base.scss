@@ -9,10 +9,6 @@ html {
   text-size-adjust: none;
   overflow-x: hidden;
   width: 100vw;
-
-  @media all and ($mobile) {
-    scroll-padding-top: 4rem;
-  }
 }
 
 body {
@@ -317,7 +313,7 @@ a {
 input[type="checkbox"] {
   transform: translateY(2px);
   color: var(--secondary);
-  border: 1px solid var(--lightgray);
+  border: 1.5px solid var(--gray);
   border-radius: 3px;
   background-color: var(--light);
   position: relative;
@@ -592,7 +588,6 @@ ul.overflow,
 ol.overflow {
   max-height: 100%;
   overflow-y: auto;
-  // 预留滚动条位置
   scrollbar-gutter: stable;
   width: 100%;
   margin-bottom: 0;
