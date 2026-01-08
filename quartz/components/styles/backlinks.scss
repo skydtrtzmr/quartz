@@ -6,6 +6,8 @@
   & > h3 {
     font-size: 1rem;
     margin: 0;
+    // 使用主题色-次级
+    color: var(--secondary);
   }
 
   & > ul.overflow {
