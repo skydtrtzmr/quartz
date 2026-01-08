@@ -9,6 +9,10 @@ html {
   text-size-adjust: none;
   overflow-x: hidden;
   width: 100vw;
+
+  @media all and ($mobile) {
+    scroll-padding-top: 4rem;
+  }
 }
 
 body {
@@ -313,7 +317,7 @@ a {
 input[type="checkbox"] {
   transform: translateY(2px);
   color: var(--secondary);
-  border: 1.5px solid var(--gray);
+  border: 1px solid var(--lightgray);
   border-radius: 3px;
   background-color: var(--light);
   position: relative;
