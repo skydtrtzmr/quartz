@@ -59,6 +59,18 @@ export default {
     contentMeta: {
       readingTime: ({ minutes }) => `${minutes}分钟阅读`,
     },
+    customMeta: {
+      fieldNames: {
+        aliases: "别名",
+        alias: "别名",
+        tags: "标签",
+        tag: "标签",
+        author: "作者",
+        date: "日期",
+        description: "描述",
+        title: "标题",
+      },
+    },
   },
   pages: {
     rss: {
