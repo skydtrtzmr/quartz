@@ -8,6 +8,7 @@ import {
   simplifySlug,
   splitAnchor,
   transformLink,
+  slugifyFilePath,
 } from "../../util/path"
 import path from "path"
 import { visit } from "unist-util-visit"
@@ -46,6 +47,19 @@ export const CrawlLinks: QuartzTransformerPlugin<Partial<Options>> = (userOpts) 
             const transformOptions: TransformOptions = {
               strategy: opts.markdownLinkResolution,
               allSlugs: ctx.allSlugs,
+            }
+
+            // 处理frontmatter中的链接
+            if (file.data.frontmatterLinks) {
+              for (const link of file.data.frontmatterLinks) {
+                try {
+                  const fullSlug = slugifyFilePath(link as any)
+                  const simpleSlug = simplifySlug(fullSlug)
+                  outgoing.add(simpleSlug)
+                } catch (e) {
+                  console.warn(`Failed to process frontmatter link: ${link}`, e)
+                }
+              }
             }
 
             visit(tree, "element", (node, _index, _parent) => {
