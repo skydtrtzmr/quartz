@@ -5,7 +5,7 @@ import * as Component from "./quartz/components"
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
   header: [
-    // Component.CasdoorUserinfo(), // 显示用户名
+    Component.CasdoorUserinfo(), // 显示用户名
     Component.CasdoorLogout(),   // 显示退出按钮
   ],
   afterBody: [],
