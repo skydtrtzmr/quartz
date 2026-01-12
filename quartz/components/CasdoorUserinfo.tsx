@@ -11,18 +11,33 @@ const CasdoorUserinfo: QuartzComponent = ({ displayClass }: QuartzComponentProps
 
 // 客户端脚本：负责读取 Cookie 并显示用户名
 CasdoorUserinfo.afterDOMLoaded = `
-const getCookie = (name) => {
-  const value = "; " + document.cookie;
-  const parts = value.split("; " + name + "=");
-  if (parts.length === 2) return decodeURIComponent(parts.pop().split(";").shift());
-  return null;
-}
+(function() {
+  const updateUsername = () => {
+    const getCookie = (name) => {
+      const value = "; " + document.cookie;
+      const parts = value.split("; " + name + "=");
+      if (parts.length === 2) return decodeURIComponent(parts.pop().split(";").shift());
+      return null;
+    }
 
-const username = getCookie("quartz_username");
-const display = document.getElementById("username-display");
-if (display) {
-  display.innerText = username ? "👤 " + username : "未登录";
-}
+    const display = document.getElementById("username-display");
+    if (!display) return;
+
+    const user = getCookie("quartz_username");
+    // 如果还没拿到，设个定时器重试一次（处理写入延迟）
+    if (!user && !window.hasRetried) {
+      window.hasRetried = true;
+      setTimeout(updateUsername, 300); 
+      return;
+    }
+
+    display.innerText = user ? "👤 " + user : "未登录";
+  };
+
+  updateUsername();
+  // 核心：监听 Quartz 的内部导航事件，确保切换页面时也会刷新用户名
+  document.addEventListener("navigated", updateUsername);
+})();
 `
 
 export default (() => CasdoorUserinfo) satisfies QuartzComponentConstructor
