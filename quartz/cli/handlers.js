@@ -233,7 +233,12 @@ See the [documentation](https://quartz.jzhao.xyz) for how to get started.
  * @param {*} argv arguments for `build`
  */
 export async function handleBuild(argv) {
-  if (argv.serve) {
+    // 新增：当使用 API 模式时，设置全局变量
+  if (argv.api) {
+    globalThis.__QUARTZ_API_MODE__ = true
+  }
+
+  if (argv.serve && !argv.api) {
     argv.watch = true
   }
 
@@ -301,46 +306,58 @@ export async function handleBuild(argv) {
 
   const buildMutex = new Mutex()
   let lastBuildMs = 0
-  let cleanupBuild = null
+  let buildApi = null
   const build = async (clientRefresh) => {
     const buildStart = new Date().getTime()
     lastBuildMs = buildStart
     const release = await buildMutex.acquire()
-    if (lastBuildMs > buildStart) {
+     try {
+      // 防止在等待锁的过程中，有更新的请求已经开始执行
+      if (lastBuildMs > buildStart) {
+        return
+      }
+
+      lastBuildMs = buildStart
+
+      if (buildApi) {
+        console.log(styleText("yellow", "Detected a source code change, doing a hard rebuild..."))
+        // 调用 close 方法清理旧的构建
+        if (typeof buildApi.close === "function") {
+          await buildApi.close()
+        }
+      }
+
+      const result = await ctx.rebuild().catch((err) => {
+        console.error(`${styleText("red", "Couldn't parse Quartz configuration:")} ${fp}`)
+        console.log(`Reason: ${styleText("grey", err)}`)
+        if (globalThis.__QUARTZ_API_MODE__) {
+          throw err
+        } else {
+          process.exit(1)
+        }
+      })
+
+      if (argv.bundleInfo) {
+        const outputFileName = "quartz/.quartz-cache/transpiled-build.mjs"
+        const meta = result.metafile.outputs[outputFileName]
+        console.log(
+          `Successfully transpiled ${Object.keys(meta.inputs).length} files (${prettyBytes(
+            meta.bytes,
+          )})`,
+        )
+        console.log(await esbuild.analyzeMetafile(result.metafile, { color: true }))
+      }
+
+      // bypass module cache
+      // https://github.com/nodejs/modules/issues/307
+      const { default: buildQuartz } = await import(`../../${cacheFile}?update=${randomUUID()}`)
+      // ^ this import is relative, so base "cacheFile" path can't be used
+
+      buildApi = await buildQuartz(argv, buildMutex, clientRefresh)
+      clientRefresh()
+    } finally {
       release()
-      return
     }
-
-    if (cleanupBuild) {
-      console.log(styleText("yellow", "Detected a source code change, doing a hard rebuild..."))
-      await cleanupBuild()
-    }
-
-    const result = await ctx.rebuild().catch((err) => {
-      console.error(`${styleText("red", "Couldn't parse Quartz configuration:")} ${fp}`)
-      console.log(`Reason: ${styleText("grey", err)}`)
-      process.exit(1)
-    })
-    release()
-
-    if (argv.bundleInfo) {
-      const outputFileName = "quartz/.quartz-cache/transpiled-build.mjs"
-      const meta = result.metafile.outputs[outputFileName]
-      console.log(
-        `Successfully transpiled ${Object.keys(meta.inputs).length} files (${prettyBytes(
-          meta.bytes,
-        )})`,
-      )
-      console.log(await esbuild.analyzeMetafile(result.metafile, { color: true }))
-    }
-
-    // bypass module cache
-    // https://github.com/nodejs/modules/issues/307
-    const { default: buildQuartz } = await import(`../../${cacheFile}?update=${randomUUID()}`)
-    // ^ this import is relative, so base "cacheFile" path can't be used
-
-    cleanupBuild = await buildQuartz(argv, buildMutex, clientRefresh)
-    clientRefresh()
   }
 
   let clientRefresh = () => {}

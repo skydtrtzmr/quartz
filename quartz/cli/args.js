@@ -76,6 +76,12 @@ export const BuildArgv = {
     default: false,
     describe: "watch for changes and rebuild automatically",
   },
+  // 新增：启用API，允许外部触发构建
+  api: {
+    boolean: true,
+    default: false,
+    describe: "enable API for external build triggering",
+  },
   baseDir: {
     string: true,
     default: "",

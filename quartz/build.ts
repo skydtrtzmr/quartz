@@ -65,7 +65,6 @@ async function buildQuartz(argv: Argv, mut: Mutex, clientRefresh: () => void) {
     console.log(`  Emitters: ${pluginNames("emitters").join(", ")}`)
   }
 
-  const release = await mut.acquire()
   perf.addEvent("clean")
   await rm(output, { recursive: true, force: true })
   console.log(`Cleaned output directory \`${output}\` in ${perf.timeSince("clean")}`)
@@ -88,11 +87,12 @@ async function buildQuartz(argv: Argv, mut: Mutex, clientRefresh: () => void) {
   console.log(
     styleText("green", `Done processing ${markdownPaths.length} files in ${perf.timeSince()}`),
   )
-  release()
 
   if (argv.watch) {
     ctx.incremental = true
     return startWatching(ctx, mut, parsedFiles, clientRefresh)
+  } else if (argv.api) {
+    return startApi(ctx, mut, parsedFiles, clientRefresh)
   }
 }
 
@@ -172,6 +172,72 @@ async function startWatching(
 
   return async () => {
     await watcher.close()
+  }
+}
+
+// setup api-endpoints for rebuilds
+async function startApi(
+  ctx: BuildCtx,
+  mut: Mutex,
+  initialContent: ProcessedContent[],
+  clientRefresh: () => void,
+) {
+  const { argv, allFiles } = ctx
+
+  const contentMap: ContentMap = new Map()
+  for (const filePath of allFiles) {
+    contentMap.set(filePath, {
+      type: "other",
+    })
+  }
+
+  for (const content of initialContent) {
+    const [_tree, vfile] = content
+    contentMap.set(vfile.data.relativePath!, {
+      type: "markdown",
+      content,
+    })
+  }
+
+  const gitIgnoredMatcher = await isGitIgnored()
+  const buildData: BuildData = {
+    ctx,
+    mut,
+    contentMap,
+    ignored: (fp) => {
+      const pathStr = toPosixPath(fp.toString())
+      if (pathStr.startsWith(".git/")) return true
+      if (gitIgnoredMatcher(pathStr)) return true
+      for (const pattern of cfg.configuration.ignorePatterns) {
+        if (minimatch(pathStr, pattern)) {
+          return true
+        }
+      }
+
+      return false
+    },
+
+    changesSinceLastBuild: {},
+    lastBuildMs: 0,
+  }
+
+  // 返回一个API接口，允许外部调用构建功能
+  return {
+    // 手动触发完整构建
+    async fullBuild() {
+      await buildQuartz(argv, mut, clientRefresh)
+    },
+
+    // 手动触发增量构建
+    async incrementalBuild(changes: ChangeEvent[]) {
+      await rebuild(changes, clientRefresh, buildData)
+    },
+
+    // 关闭构建进程
+    async close() {
+      // 如果有watcher，关闭它
+      return Promise.resolve()
+    },
   }
 }
 
@@ -301,6 +367,10 @@ export default async (argv: Argv, mut: Mutex, clientRefresh: () => void) => {
   try {
     return await buildQuartz(argv, mut, clientRefresh)
   } catch (err) {
+    // API 模式下，直接抛出错误，不再重复处理
+    if (globalThis.__QUARTZ_API_MODE__) {
+      throw err
+    }
     trace("\nExiting Quartz due to a fatal error", err as Error)
   }
 }
