@@ -15,3 +15,9 @@ Quartz is a set of tools that helps you publish your [digital garden](https://jz
     <img src="https://cdn.jsdelivr.net/gh/jackyzha0/jackyzha0/sponsorkit/sponsors.svg" />
   </a>
 </p>
+
+
+#### API模式启动方式：
+```
+npx quartz build --serve --api -d D:\Notes\Obsidian_notes\content\
+```
