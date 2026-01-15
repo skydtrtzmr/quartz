@@ -14,4 +14,10 @@ export declare global {
     spaNavigate(url: URL, isBack: boolean = false)
     addCleanup(fn: (...args: any[]) => void)
   }
+   /**
+   * Node.js runtime globals
+   * API mode flag - when true, build errors throw instead of process.exit(1)
+   * Set in handlers.js when --api argument is present
+   */
+  var __QUARTZ_API_MODE__: boolean | undefined
 }
