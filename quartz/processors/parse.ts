@@ -173,7 +173,13 @@ export async function parseMarkdown(ctx: BuildCtx, fps: FilePath[]): Promise<Pro
     })
     const errorHandler = (err: any) => {
       console.error(err)
-      process.exit(1)
+      // process.exit(1)
+      // process.exit(1)
+      if (globalThis.__QUARTZ_API_MODE__) {
+        throw err // API 模式不退出
+      } else {
+        process.exit(1)
+      }
     }
 
     const serializableCtx: WorkerSerializableBuildCtx = {
