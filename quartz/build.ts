@@ -12,7 +12,7 @@ import cfg from "../quartz.config"
 import { FilePath, joinSegments, slugifyFilePath } from "./util/path"
 import chokidar from "chokidar"
 import { ProcessedContent } from "./plugins/vfile"
-import { Argv, BuildCtx } from "./util/ctx"
+import { Argv, BuildCtx, trieFromAllFiles } from "./util/ctx"
 import { glob, toPosixPath } from "./util/glob"
 import { trace } from "./util/trace"
 import { options } from "./util/sourcemap"
@@ -25,12 +25,12 @@ import { minimatch } from "minimatch"
 type ContentMap = Map<
   FilePath,
   | {
-      type: "markdown"
-      content: ProcessedContent
-    }
+    type: "markdown"
+    content: ProcessedContent
+  }
   | {
-      type: "other"
-    }
+    type: "other"
+  }
 >
 
 type BuildData = {
@@ -225,7 +225,7 @@ async function rebuild(changes: ChangeEvent[], clientRefresh: () => void, buildD
     const processedContent = contentMap.get(path)
     // [Bug] 在这一步，contentMap.get就已经没抓到东西了。
     console.log(`Change event: ${path}, ${processedContent}`);
-    
+
     if (processedContent?.type === "markdown") {
       const [_tree, file] = processedContent.content
       return {
@@ -243,7 +243,7 @@ async function rebuild(changes: ChangeEvent[], clientRefresh: () => void, buildD
 
   // 【Bug fixed】这里原先顺序反了，会导致删除事件中，先执行了contentMap.delete，再执行了contentMap.get。
 
-    // update state using changesSinceLastBuild
+  // update state using changesSinceLastBuild
   // we do this weird play of add => compute change events => remove
   // so that partialEmitters can do appropriate cleanup based on the content of deleted files
   for (const [file, change] of Object.entries(changesSinceLastBuild)) {
@@ -264,6 +264,10 @@ async function rebuild(changes: ChangeEvent[], clientRefresh: () => void, buildD
   // update allFiles and then allSlugs with the consistent view of content map
   ctx.allFiles = Array.from(contentMap.keys())
   ctx.allSlugs = ctx.allFiles.map((fp) => slugifyFilePath(fp as FilePath))
+
+  // 在这里删除以便后续重新生成。
+  ctx.trie = undefined
+
   let processedFiles = filterContent(
     ctx,
     Array.from(contentMap.values())
