@@ -216,7 +216,34 @@ async function rebuild(changes: ChangeEvent[], clientRefresh: () => void, buildD
     })
   }
 
-  // update state using changesSinceLastBuild
+
+
+
+
+  const changeEvents: ChangeEvent[] = Object.entries(changesSinceLastBuild).map(([fp, type]) => {
+    const path = fp as FilePath
+    const processedContent = contentMap.get(path)
+    // [Bug] 在这一步，contentMap.get就已经没抓到东西了。
+    console.log(`Change event: ${path}, ${processedContent}`);
+    
+    if (processedContent?.type === "markdown") {
+      const [_tree, file] = processedContent.content
+      return {
+        type,
+        path,
+        file,
+      }
+    }
+
+    return {
+      type,
+      path,
+    }
+  })
+
+  // 【Bug fixed】这里原先顺序反了，会导致删除事件中，先执行了contentMap.delete，再执行了contentMap.get。
+
+    // update state using changesSinceLastBuild
   // we do this weird play of add => compute change events => remove
   // so that partialEmitters can do appropriate cleanup based on the content of deleted files
   for (const [file, change] of Object.entries(changesSinceLastBuild)) {
@@ -233,24 +260,6 @@ async function rebuild(changes: ChangeEvent[], clientRefresh: () => void, buildD
       })
     }
   }
-
-  const changeEvents: ChangeEvent[] = Object.entries(changesSinceLastBuild).map(([fp, type]) => {
-    const path = fp as FilePath
-    const processedContent = contentMap.get(path)
-    if (processedContent?.type === "markdown") {
-      const [_tree, file] = processedContent.content
-      return {
-        type,
-        path,
-        file,
-      }
-    }
-
-    return {
-      type,
-      path,
-    }
-  })
 
   // update allFiles and then allSlugs with the consistent view of content map
   ctx.allFiles = Array.from(contentMap.keys())
