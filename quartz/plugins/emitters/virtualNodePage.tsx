@@ -3,7 +3,7 @@ import { QuartzComponentProps } from "../../components/types"
 import HeaderConstructor from "../../components/Header"
 import BodyConstructor from "../../components/Body"
 import { pageResources, renderPage } from "../../components/renderPage"
-import { ProcessedContent, QuartzPluginData, defaultProcessedContent } from "../vfile"
+import { QuartzPluginData, defaultProcessedContent } from "../vfile"
 import { FullPageLayout } from "../../cfg"
 import {
   FullSlug,
@@ -16,54 +16,35 @@ import {
 import { defaultListPageLayout, sharedPageComponents } from "../../../quartz.layout"
 import VirtualNodeContent from "../../components/pages/VirtualNodeContent"
 import { write } from "./helpers"
-import { BuildCtx, GraphCache } from "../../util/ctx"
+import { BuildCtx } from "../../util/ctx"
 import { StaticResources } from "../../util/resources"
 import * as Component from "../../components"
 
 // quartz/plugins/emitters/virtualNodePage.tsx
 
-function computeVirtualNodes(
-  ctx: BuildCtx,
-  allFiles: QuartzPluginData[]
-): Set<string> {
-  const graph = ctx.graphCache
-  if (!graph) {
-    // 如果没有图谱缓存，降级到遍历文件（全量构建时）
-    return computeVirtualNodesFromFiles(allFiles)
-  }
-
-  // 使用图谱计算虚拟节点
+/**
+ * 计算所有虚拟节点
+ * 虚拟节点：被某文件引用（links），但该文件不存在的 slug
+ */
+function computeAllVirtualNodes(allFiles: QuartzPluginData[]): Set<string> {
   const existingSlugs = new Set(allFiles.map(f => simplifySlug(f.slug!)))
   const virtualNodes: Set<string> = new Set()
 
-  // 遍历图谱的边，找出目标节点不存在的
-  for (const edge of graph.edges) {
-    const targetSlug = edge.target as any as SimpleSlug  // 强制类型转换
-    if (!existingSlugs.has(targetSlug) && graph.nodes[edge.target]) {
-      virtualNodes.add(edge.target)
-    }
-  }
-
-  return virtualNodes
-}
-
-// ===== 降级逻辑：原来的实现 =====
-function computeVirtualNodesFromFiles(allFiles: QuartzPluginData[]): Set<string> {
-  const existingSlugs = new Set(allFiles.map(f => simplifySlug(f.slug!)))
-  const virtualNodes: Set<string> = new Set()
-
+  // 排除 tag 相关 slug
   const allTags = new Set(
     allFiles
       .flatMap((data) => data.frontmatter?.tags ?? [])
-      .flatMap(getAllSegmentPrefixes)
+      .flatMap(getAllSegmentPrefixes),
   )
 
   for (const file of allFiles) {
     const links = file.links ?? []
     for (const link of links) {
-      if (!existingSlugs.has(link) && 
-          !allTags.has(link) && 
-          !link.startsWith("tags/")) {
+      if (
+        !existingSlugs.has(link) &&
+        !allTags.has(link) &&
+        !link.startsWith("tags/")
+      ) {
         virtualNodes.add(link)
       }
     }
@@ -72,24 +53,39 @@ function computeVirtualNodesFromFiles(allFiles: QuartzPluginData[]): Set<string>
   return virtualNodes
 }
 
-// ===== 新增：从图谱获取反向链接 =====
-function computeBacklinks(slug: string, graph: GraphCache | undefined, allFiles: QuartzPluginData[]): QuartzPluginData[] {
-  if (!graph) {
-    // 降级：从文件列表计算
-    return allFiles.filter(file => file.links?.includes(slug as SimpleSlug))
-  }
-
-  // 从图谱获取反向链接的 slugs
-  const backlinkSlugs = graph.edges
-    .filter(edge => edge.target === slug)
-    .map(edge => edge.source)
-
-  const backlinkSet = new Set(backlinkSlugs)
-
-  // 返回对应的文件数据
-  return allFiles.filter(file => backlinkSet.has(simplifySlug(file.slug!)))
+/**
+ * 计算反向链接：所有引用该 slug 的文件
+ */
+function computeBacklinks(slug: string, allFiles: QuartzPluginData[]): QuartzPluginData[] {
+  return allFiles.filter(file => file.links?.includes(slug as SimpleSlug))
 }
 
+/**
+ * 生成虚拟节点的索引数据（供 Graph View 使用）
+ */
+function generateVirtualNodeIndex(
+  virtualNodes: Set<string>,
+  allFiles: QuartzPluginData[],
+): Record<string, { title: string; links: SimpleSlug[]; content: string }> {
+  const index: Record<string, { title: string; links: SimpleSlug[]; content: string }> = {}
+
+  for (const nodeName of virtualNodes) {
+    const backlinks = computeBacklinks(nodeName, allFiles)
+    const links = backlinks.map(f => simplifySlug(f.slug!))
+
+    index[nodeName] = {
+      title: nodeName,
+      links: links,
+      content: `被以下页面引用: ${links.map(l => l).join(", ")}`,
+    }
+  }
+
+  return index
+}
+
+/**
+ * 处理虚拟节点页面
+ */
 async function processVirtualNodePage(
   ctx: BuildCtx,
   nodeName: string,
@@ -111,7 +107,7 @@ async function processVirtualNodePage(
   const cfg = ctx.cfg.configuration
   const externalResources = pageResources(pathToRoot(slug), resources)
 
-// 将反向链接注入到 vfile.data
+  // 将反向链接注入到 vfile.data
   vfile.data.backlinks = backlinks
 
   const componentData: QuartzComponentProps = {
@@ -138,7 +134,7 @@ export const VirtualNodePage: QuartzEmitterPlugin = () => {
     ...sharedPageComponents,
     ...defaultListPageLayout,
     pageBody: VirtualNodeContent(),
-    right: [              // 添加此处配置，使得虚拟节点页面就会显示知识图谱和反向链接组件
+    right: [
       Component.Graph(),
       Component.Backlinks(),
     ],
@@ -166,13 +162,82 @@ export const VirtualNodePage: QuartzEmitterPlugin = () => {
     },
     async *emit(ctx, content, resources) {
       const allFiles = content.map((c) => c[1].data)
-      const virtualNodes = computeVirtualNodes(ctx, allFiles)
+      const virtualNodes = computeAllVirtualNodes(allFiles)
 
+      // 生成虚拟节点页面
       for (const nodeName of virtualNodes) {
-        // 从图谱获取反向链接
-        const backlinks = computeBacklinks(nodeName, ctx.graphCache, allFiles)
+        const backlinks = computeBacklinks(nodeName, allFiles)
         yield processVirtualNodePage(ctx, nodeName, backlinks, allFiles, opts, resources)
       }
+
+      // 生成虚拟节点索引文件（供 Graph View 使用）
+      if (virtualNodes.size > 0) {
+        const virtualNodeIndex = generateVirtualNodeIndex(virtualNodes, allFiles)
+        const fp = joinSegments("static", "virtualNodeIndex") as FullSlug
+        yield write({
+          ctx,
+          content: JSON.stringify(virtualNodeIndex),
+          slug: fp,
+          ext: ".json",
+        })
+      }
+    },
+    async *partialEmit(ctx, content, resources, changeEvents) {
+      const allFiles = content.map((c) => c[1].data)
+
+      // 找出受影响的虚拟节点
+      const affectedVirtualNodes: Set<string> = new Set()
+
+      for (const changeEvent of changeEvents) {
+        // 如果是删除事件，检查被删除文件的 links
+        if (changeEvent.type === "delete" && changeEvent.file) {
+          const links = changeEvent.file.data.links ?? []
+          for (const link of links) {
+            affectedVirtualNodes.add(link)
+          }
+        }
+
+        // 如果是新增或修改事件
+        if (changeEvent.type === "add" || changeEvent.type === "change") {
+          if (!changeEvent.file) continue
+
+          // 文件本身的 slug 可能成为虚拟节点（如果被其他文件引用）
+          const fileSlug = simplifySlug(changeEvent.file.data.slug!)
+          affectedVirtualNodes.add(fileSlug)
+
+          // 文件的 links 中引用的 slug
+          const links = changeEvent.file.data.links ?? []
+          for (const link of links) {
+            affectedVirtualNodes.add(link)
+          }
+        }
+      }
+
+      // 如果没有受影响的虚拟节点，跳过
+      if (affectedVirtualNodes.size === 0) {
+        return
+      }
+
+      // 计算所有虚拟节点（需要完整的 allFiles 状态来计算反向链接）
+      const allVirtualNodes = computeAllVirtualNodes(allFiles)
+
+      // 只生成受影响的虚拟节点页面
+      for (const nodeName of allVirtualNodes) {
+        if (affectedVirtualNodes.has(nodeName)) {
+          const backlinks = computeBacklinks(nodeName, allFiles)
+          yield processVirtualNodePage(ctx, nodeName, backlinks, allFiles, opts, resources)
+        }
+      }
+
+      // 更新虚拟节点索引文件
+      const virtualNodeIndex = generateVirtualNodeIndex(allVirtualNodes, allFiles)
+      const fp = joinSegments("static", "virtualNodeIndex") as FullSlug
+      yield write({
+        ctx,
+        content: JSON.stringify(virtualNodeIndex),
+        slug: fp,
+        ext: ".json",
+      })
     },
   }
 }

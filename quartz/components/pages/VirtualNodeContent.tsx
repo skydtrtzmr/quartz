@@ -1,30 +1,44 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "../types"
+import { QuartzPluginData } from "../../plugins/vfile"
+import { simplifySlug } from "../../util/path"
 
-const VirtualNodeContent: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
-  const slug = fileData.slug!
-  const title = fileData.title || slug
+const VirtualNodeContent: QuartzComponent = ({ fileData, allFiles }: QuartzComponentProps) => {
+  const slug = simplifySlug(fileData.slug!)
+  const title = fileData.title || fileData.slug
 
-  // 从 fileData.backlinks 获取反向链接（已在 emitter 中注入）
-  const backlinks = (fileData.backlinks as any[]) || []
+  // 动态计算反向链接（从 allFiles 中查找引用该 slug 的文件）
+  // 排除 tag 相关的 slug
+  const backlinks = allFiles.filter((file: QuartzPluginData) => {
+    const fileLinks = file.links ?? []
+    const fileSlug = simplifySlug(file.slug!)
+    // 检查文件是否引用了当前虚拟节点
+    const references = fileLinks.includes(slug) ||
+      fileLinks.some(link => link === slug || link.endsWith('/' + slug))
+    // 排除 tag 页面
+    const isTagPage = fileSlug.startsWith("tags/")
+    return references && !isTagPage
+  })
 
   return (
-    <article class="virtual-node">
-      <h1>{title}</h1>
-      <p class="virtual-node-description">
-        不存在该页面，但是被以下页面引用:
-      </p>
-      {backlinks.length > 0 ? (
-        <ul class="backlinks-list">
-          {backlinks.map((file: any) => (
-            <li key={file.slug}>
-              <a href={`/${file.slug}`}>{file.title || file.slug}</a>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>No backlinks found.</p>
-      )}
-    </article>
+    <div class="popover-hint">
+      <article class="virtual-node">
+        <h1>{title}</h1>
+        <p class="virtual-node-description">
+          不存在该页面，但是被以下页面引用:
+        </p>
+        {backlinks.length > 0 ? (
+          <ul class="backlinks-list">
+            {backlinks.map((file: QuartzPluginData) => (
+              <li key={file.slug}>
+                <a href={`/${file.slug}`}>{file.frontmatter?.title || file.slug}</a>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No backlinks found.</p>
+        )}
+      </article>
+    </div>
   )
 }
 

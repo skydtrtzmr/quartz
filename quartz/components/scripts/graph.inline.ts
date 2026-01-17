@@ -95,9 +95,29 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       v,
     ]),
   )
+
+  // 加载虚拟节点索引
+  let virtualNodeData: Map<SimpleSlug, { title: string; links: SimpleSlug[]; content: string }> = new Map()
+  try {
+    const virtualIndexResponse = await fetch("/static/virtualNodeIndex.json")
+    if (virtualIndexResponse.ok) {
+      const virtualIndex = await virtualIndexResponse.json()
+      Object.entries(virtualIndex).forEach(([k, v]) => {
+        virtualNodeData.set(simplifySlug(k as FullSlug), v as { title: string; links: SimpleSlug[]; content: string })
+      })
+    }
+  } catch (e) {
+    // 虚拟节点索引文件不存在，忽略
+  }
+
   const links: SimpleLinkData[] = []
   const tags: SimpleSlug[] = []
   const validLinks = new Set(data.keys())
+
+  // 将虚拟节点也加入有效链接集合
+  for (const virtualSlug of virtualNodeData.keys()) {
+    validLinks.add(virtualSlug)
+  }
 
   const tweens = new Map<string, TweenNode>()
   for (const [source, details] of data.entries()) {
@@ -122,6 +142,15 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     }
   }
 
+  // 处理虚拟节点的链接（虚拟节点作为源节点）
+  for (const [virtualSource, vDetails] of virtualNodeData.entries()) {
+    for (const dest of vDetails.links) {
+      if (validLinks.has(dest)) {
+        links.push({ source: virtualSource, target: dest })
+      }
+    }
+  }
+
   const neighbourhood = new Set<SimpleSlug>()
   const wl: (SimpleSlug | "__SENTINEL")[] = [slug, "__SENTINEL"]
   if (depth >= 0) {
@@ -141,10 +170,12 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   } else {
     validLinks.forEach((id) => neighbourhood.add(id))
     if (showTags) tags.forEach((tag) => neighbourhood.add(tag))
+    // 添加所有虚拟节点到邻域
+    virtualNodeData.forEach((_, virtualSlug) => neighbourhood.add(virtualSlug))
   }
 
   const nodes = [...neighbourhood].map((url) => {
-    const text = url.startsWith("tags/") ? "#" + url.substring(5) : (data.get(url)?.title ?? url)
+    const text = url.startsWith("tags/") ? "#" + url.substring(5) : (data.get(url)?.title ?? virtualNodeData.get(url)?.title ?? url)
     return {
       id: url,
       text,
