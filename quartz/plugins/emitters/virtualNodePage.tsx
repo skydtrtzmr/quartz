@@ -189,8 +189,13 @@ export const VirtualNodePage: QuartzEmitterPlugin = () => {
       const affectedVirtualNodes: Set<string> = new Set()
 
       for (const changeEvent of changeEvents) {
-        // 如果是删除事件，检查被删除文件的 links
+        // 如果是删除事件
         if (changeEvent.type === "delete" && changeEvent.file) {
+          // 被删除文件的 slug 本身也可能成为虚拟节点（如果被其他文件引用）
+          const deletedSlug = simplifySlug(changeEvent.file.data.slug!)
+          affectedVirtualNodes.add(deletedSlug)
+
+          // 被删除文件引用的链接也可能变成虚拟节点
           const links = changeEvent.file.data.links ?? []
           for (const link of links) {
             affectedVirtualNodes.add(link)
