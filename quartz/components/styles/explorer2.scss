@@ -184,10 +184,11 @@ button.desktop-explorer {
       color: var(--dark);
       opacity: 0.85;
       pointer-events: all;
-      display: flex;
+      display: block;
       align-items: center;
       width: 100%;
       height: 100%;
+      line-height: 2rem;     /* 让行高等于高度，实现垂直居中 */
       padding: 0 0.75rem;
       padding-right: 0.5rem;
       margin: 2px 0;
