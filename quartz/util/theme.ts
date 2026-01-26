@@ -131,8 +131,9 @@ export async function processGoogleFonts(
     const url = match[1]
     const filename = match[2]
     const extension = fontMimeMap[match[3].toLowerCase()]
-    const staticUrl = `https://${baseUrl}/static/fonts/${filename}.${extension}`
-
+    // const staticUrl = `https://${baseUrl}/static/fonts/${filename}.${extension}`
+    // [M] 使用相对路径，让浏览器根据当前协议自动选择 http/https
+    const staticUrl = `/static/fonts/${filename}.${extension}`
     processedStylesheet = processedStylesheet.replace(url, staticUrl)
     fontFiles.push({ url, filename, extension })
   }
