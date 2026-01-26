@@ -2,6 +2,7 @@ import { QuartzConfig } from "../cfg"
 import { QuartzPluginData } from "../plugins/vfile"
 import { FileTrieNode } from "./fileTrie"
 import { FilePath, FullSlug } from "./path"
+import { GraphDatabase } from "./graphdb"
 
 export interface Argv {
   directory: string
@@ -13,6 +14,8 @@ export interface Argv {
   wsPort: number
   remoteDevHost?: string
   concurrency?: number
+  sqlite?: boolean
+  reset?: boolean
 }
 
 export type BuildTimeTrieData = QuartzPluginData & {
@@ -29,10 +32,13 @@ export interface BuildCtx {
   allFiles: FilePath[]
   trie?: FileTrieNode<BuildTimeTrieData>
   incremental: boolean
+  graphDb?: GraphDatabase  // SQLite 图谱数据库
 }
 
 export function trieFromAllFiles(allFiles: QuartzPluginData[]): FileTrieNode<BuildTimeTrieData> {
   const trie = new FileTrieNode<BuildTimeTrieData>([])
+  // [NOTE] 注意，能生成trie的前提是 allFiles 中的文件必须有 frontmatter。
+  // 而allFiles是来自于 *partialEmit 或 *emit 中的 content (ProcessedContent)。
   allFiles.forEach((file) => {
     if (file.frontmatter) {
       trie.add({

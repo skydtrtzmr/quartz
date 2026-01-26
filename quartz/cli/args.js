@@ -76,6 +76,18 @@ export const BuildArgv = {
     default: false,
     describe: "watch for changes and rebuild automatically",
   },
+  // 新增：启用基于 SQLite 的持久化增量构建
+  sqlite: {
+    boolean: true,
+    default: false,
+    describe: "enable SQLite-based persistent incremental build",
+  },
+  // 重置 SQLite 缓存和输出目录（当 -d 参数变化时也会自动触发）
+  reset: {
+    boolean: true,
+    default: false,
+    describe: "reset the SQLite cache and output directory before building",
+  },
   baseDir: {
     string: true,
     default: "",
