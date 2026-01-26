@@ -24,6 +24,7 @@ export const defaultContentPageLayout: PageLayout = {
     Component.ArticleTitle(),
     Component.ContentMeta(),
     Component.TagList(),
+    Component.FrontmatterMeta(),
   ],
   left: [
     Component.PageTitle(),
@@ -31,18 +32,31 @@ export const defaultContentPageLayout: PageLayout = {
     Component.Flex({
       components: [
         {
-          Component: Component.Search(),
+          Component: Component.Search2(),
           grow: true,
         },
         { Component: Component.Darkmode() },
         { Component: Component.ReaderMode() },
       ],
     }),
-    Component.Explorer(),
+    Component.Explorer2({
+      stickyHeaders: false,
+    }),
   ],
   right: [
-    Component.Graph(),
-    Component.DesktopOnly(Component.TableOfContents()),
+    Component.Graph({
+      localGraph: {
+        // ... 其他配置
+        // fontSize: 0.4, // 减小初始字体大小（默认0.6）
+        // opacityScale: 0.5, // 减小透明度缩放，需要更大缩放才显示label（默认1）
+      },
+      globalGraph: {
+        // ... 其他配置
+        fontSize: 0.4, // 减小初始字体大小（默认0.6）
+        opacityScale: 0.6, // 减小透明度缩放，需要更大缩放才显示label（默认1）
+      },
+    }),
+    Component.DesktopOnly(Component.TableOfContents2()),
     Component.Backlinks(),
   ],
 }
@@ -56,13 +70,16 @@ export const defaultListPageLayout: PageLayout = {
     Component.Flex({
       components: [
         {
-          Component: Component.Search(),
+          // [NOTE] 注意这里必须和上面一样选用相同的Search组件，否则会导致元素重复渲染问题
+          Component: Component.Search2(),
           grow: true,
         },
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.Explorer(),
+    Component.Explorer2({
+      stickyHeaders: false,
+    }),
   ],
   right: [],
 }

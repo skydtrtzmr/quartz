@@ -31,6 +31,12 @@ type NodeData = {
   id: SimpleSlug
   text: string
   tags: string[]
+  // 标记是否为核心节点（连接数>1）
+  isCore?: boolean
+  // 展开状态（手动展开/收起关联节点）
+  isExpanded?: boolean
+  // 关联的边缘节点数量（用于显示徽章）
+  edgeNodeCount?: number
 } & SimulationNodeDatum
 
 type SimpleLinkData = {
@@ -50,6 +56,8 @@ type LinkRenderData = GraphicsInfo & {
 type NodeRenderData = GraphicsInfo & {
   simulationData: NodeData
   label: Text
+  badge?: Graphics // 关联节点数量徽章
+  badgeText?: Text // 徽章上的数字
 }
 
 const localStorageKey = "graph-visited"
@@ -66,6 +74,41 @@ function addToVisited(slug: SimpleSlug) {
 type TweenNode = {
   update: (time: number) => void
   stop: () => void
+}
+
+// ============ 交互配置 ============
+const DOUBLE_CLICK_DELAY = 300 // 双击检测间隔（ms）
+
+// ============ 对象池：复用 Graphics 和 Text 对象 ============
+class ObjectPool<T> {
+  private pool: T[] = []
+  private createFn: () => T
+  private resetFn: (obj: T) => void
+
+  constructor(createFn: () => T, resetFn: (obj: T) => void) {
+    this.createFn = createFn
+    this.resetFn = resetFn
+  }
+
+  acquire(): T {
+    if (this.pool.length > 0) {
+      return this.pool.pop()!
+    }
+    return this.createFn()
+  }
+
+  release(obj: T): void {
+    this.resetFn(obj)
+    this.pool.push(obj)
+  }
+
+  clear(): void {
+    this.pool = []
+  }
+
+  get size(): number {
+    return this.pool.length
+  }
 }
 
 async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
@@ -97,13 +140,17 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   )
 
   // 加载虚拟节点索引
-  let virtualNodeData: Map<SimpleSlug, { title: string; links: SimpleSlug[]; content: string }> = new Map()
+  let virtualNodeData: Map<SimpleSlug, { title: string; links: SimpleSlug[]; content: string }> =
+    new Map()
   try {
     const virtualIndexResponse = await fetch("/static/virtualNodeIndex.json")
     if (virtualIndexResponse.ok) {
       const virtualIndex = await virtualIndexResponse.json()
       Object.entries(virtualIndex).forEach(([k, v]) => {
-        virtualNodeData.set(simplifySlug(k as FullSlug), v as { title: string; links: SimpleSlug[]; content: string })
+        virtualNodeData.set(
+          simplifySlug(k as FullSlug),
+          v as { title: string; links: SimpleSlug[]; content: string },
+        )
       })
     }
   } catch (e) {
@@ -174,22 +221,110 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     virtualNodeData.forEach((_, virtualSlug) => neighbourhood.add(virtualSlug))
   }
 
-  const nodes = [...neighbourhood].map((url) => {
-    const text = url.startsWith("tags/") ? "#" + url.substring(5) : (data.get(url)?.title ?? virtualNodeData.get(url)?.title ?? url)
+  const allNodes: NodeData[] = [...neighbourhood].map((url) => {
+    const text = url.startsWith("tags/")
+      ? "#" + url.substring(5)
+      : (data.get(url)?.title ?? virtualNodeData.get(url)?.title ?? url)
     return {
       id: url,
       text,
       tags: data.get(url)?.tags ?? [],
+      isCore: false, // 稍后计算
     }
   })
-  const graphData: { nodes: NodeData[]; links: LinkData[] } = {
-    nodes,
-    links: links
-      .filter((l) => neighbourhood.has(l.source) && neighbourhood.has(l.target))
-      .map((l) => ({
-        source: nodes.find((n) => n.id === l.source)!,
-        target: nodes.find((n) => n.id === l.target)!,
-      })),
+
+  // 先创建所有链接
+  const allLinks = links
+    .filter((l) => neighbourhood.has(l.source) && neighbourhood.has(l.target))
+    .map((l) => ({
+      source: allNodes.find((n) => n.id === l.source)!,
+      target: allNodes.find((n) => n.id === l.target)!,
+    }))
+
+  // 全局 graph 时过滤节点
+  const isGlobalGraph = graph.classList.contains("global-graph-container")
+
+  // 计算每个节点的连接数
+  const nodeLinkCount = new Map<string, number>()
+  for (const l of allLinks) {
+    nodeLinkCount.set(l.source.id, (nodeLinkCount.get(l.source.id) ?? 0) + 1)
+    nodeLinkCount.set(l.target.id, (nodeLinkCount.get(l.target.id) ?? 0) + 1)
+  }
+
+  // ====== 永久过滤孤儿节点（连接数=0），这些节点永远不会被渲染 ======
+  const nonOrphanNodes = allNodes.filter((n) => (nodeLinkCount.get(n.id) ?? 0) > 0)
+  const nonOrphanNodeIds = new Set(nonOrphanNodes.map((n) => n.id))
+  // 过滤后的链接（两端都必须是非孤儿节点）
+  const nonOrphanLinks = allLinks.filter(
+    (l) => nonOrphanNodeIds.has(l.source.id) && nonOrphanNodeIds.has(l.target.id),
+  )
+
+  // 为每个非孤儿节点标记是否为核心节点（连接数>1）
+  for (const n of nonOrphanNodes) {
+    n.isCore = (nodeLinkCount.get(n.id) ?? 0) > 1
+  }
+
+  // 核心节点（连接数>1）和边缘节点（连接数=1）
+  const coreNodes = nonOrphanNodes.filter((n) => n.isCore)
+  const edgeNodes = nonOrphanNodes.filter((n) => !n.isCore)
+  const coreNodeIds = new Set(coreNodes.map((n) => n.id))
+  const edgeNodeIds = new Set(edgeNodes.map((n) => n.id))
+
+  // 核心节点之间的链接
+  const coreLinks = nonOrphanLinks.filter(
+    (l) => coreNodeIds.has(l.source.id) && coreNodeIds.has(l.target.id),
+  )
+
+  // ====== 构建节点->关联边缘节点的映射（用于手动展开） ======
+  // nodeToEdgeNodes: 节点ID -> 与之直接相连的边缘节点列表
+  const nodeToEdgeNodes = new Map<SimpleSlug, NodeData[]>()
+  // nodeToEdgeLinks: 节点ID -> 与边缘节点相连的链接列表
+  const nodeToEdgeLinks = new Map<SimpleSlug, LinkData[]>()
+
+  for (const l of nonOrphanLinks) {
+    const sourceIsEdge = edgeNodeIds.has(l.source.id)
+    const targetIsEdge = edgeNodeIds.has(l.target.id)
+
+    if (sourceIsEdge && !targetIsEdge) {
+      // source是边缘节点，target是非边缘节点
+      if (!nodeToEdgeNodes.has(l.target.id)) nodeToEdgeNodes.set(l.target.id, [])
+      if (!nodeToEdgeNodes.get(l.target.id)!.some((n) => n.id === l.source.id)) {
+        nodeToEdgeNodes.get(l.target.id)!.push(l.source)
+      }
+      if (!nodeToEdgeLinks.has(l.target.id)) nodeToEdgeLinks.set(l.target.id, [])
+      nodeToEdgeLinks.get(l.target.id)!.push(l)
+    } else if (!sourceIsEdge && targetIsEdge) {
+      // target是边缘节点，source是非边缘节点
+      if (!nodeToEdgeNodes.has(l.source.id)) nodeToEdgeNodes.set(l.source.id, [])
+      if (!nodeToEdgeNodes.get(l.source.id)!.some((n) => n.id === l.target.id)) {
+        nodeToEdgeNodes.get(l.source.id)!.push(l.target)
+      }
+      if (!nodeToEdgeLinks.has(l.source.id)) nodeToEdgeLinks.set(l.source.id, [])
+      nodeToEdgeLinks.get(l.source.id)!.push(l)
+    }
+  }
+
+  // 为每个节点设置关联边缘节点数量和初始展开状态
+  for (const n of nonOrphanNodes) {
+    n.edgeNodeCount = nodeToEdgeNodes.get(n.id)?.length ?? 0
+    n.isExpanded = false
+  }
+
+  let graphData: { nodes: NodeData[]; links: LinkData[] }
+  if (isGlobalGraph) {
+    // 全局图谱：初始只加载核心节点
+    graphData = {
+      nodes: [...coreNodes],
+      links: [...coreLinks],
+    }
+  } else {
+    // 局部 graph：加载所有非孤儿节点
+    graphData = {
+      // nodes: nonOrphanNodes,
+      nodes: allNodes,
+      // links: nonOrphanLinks,
+      links: allLinks,
+    }
   }
 
   const width = graph.offsetWidth
@@ -237,9 +372,8 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   }
 
   function nodeRadius(d: NodeData) {
-    const numLinks = graphData.links.filter(
-      (l) => l.source.id === d.id || l.target.id === d.id,
-    ).length
+    // 使用预计算的 nodeLinkCount 确保节点大小一致性（不受动态加载影响）
+    const numLinks = nodeLinkCount.get(d.id) ?? 0
     return 2 + Math.sqrt(numLinks)
   }
 
@@ -402,6 +536,51 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   const linkContainer = new Container<Graphics>({ zIndex: 1, isRenderGroup: true })
   stage.addChild(nodesContainer, labelsContainer, linkContainer)
 
+  // ====== 对象池初始化 ======
+  const graphicsPool = new ObjectPool<Graphics>(
+    () => new Graphics({ interactive: true, eventMode: "static", cursor: "pointer" }),
+    (gfx) => {
+      gfx.clear()
+      gfx.removeAllListeners()
+      gfx.visible = true
+      gfx.alpha = 1
+      if (gfx.parent) gfx.parent.removeChild(gfx)
+    },
+  )
+
+  const textPool = new ObjectPool<Text>(
+    () =>
+      new Text({
+        interactive: false,
+        eventMode: "none",
+        text: "",
+        alpha: 0,
+        anchor: { x: 0.5, y: 1.2 },
+        style: {
+          fontSize: fontSize * 15,
+          fill: computedStyleMap["--dark"],
+          fontFamily: computedStyleMap["--bodyFont"],
+        },
+        resolution: window.devicePixelRatio * 4,
+      }),
+    (label) => {
+      label.text = ""
+      label.alpha = 0
+      label.visible = true
+      if (label.parent) label.parent.removeChild(label)
+    },
+  )
+
+  const linkGraphicsPool = new ObjectPool<Graphics>(
+    () => new Graphics({ interactive: false, eventMode: "none" }),
+    (gfx) => {
+      gfx.clear()
+      gfx.visible = true
+      gfx.alpha = 1
+      if (gfx.parent) gfx.parent.removeChild(gfx)
+    },
+  )
+
   for (const n of graphData.nodes) {
     const nodeId = n.id
 
@@ -480,7 +659,261 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     linkRenderData.push(linkRenderDatum)
   }
 
+  // 创建节点渲染对象的辅助函数（使用对象池）
+  function createNodeRenderObject(n: NodeData): NodeRenderData {
+    const nodeId = n.id
+    const isTagNode = nodeId.startsWith("tags/")
+    const radius = nodeRadius(n)
+
+    // 从对象池获取 Text
+    const label = textPool.acquire()
+    label.text = n.text
+    label.alpha = 0
+    label.scale.set(1 / scale)
+
+    // 从对象池获取 Graphics
+    const gfx = graphicsPool.acquire()
+    gfx.label = nodeId
+    gfx.hitArea = new Circle(0, 0, radius + 8) // 扩大点击区域
+    gfx.circle(0, 0, radius).fill({ color: isTagNode ? computedStyleMap["--light"] : color(n) })
+
+    if (isTagNode) {
+      gfx.stroke({ width: 2, color: computedStyleMap["--tertiary"] })
+    }
+
+    // 绑定 hover 事件
+    gfx.on("pointerover", (e) => {
+      updateHoverInfo(e.target.label)
+      if (!dragging) {
+        renderPixiFromD3()
+      }
+    })
+    gfx.on("pointerleave", () => {
+      updateHoverInfo(null)
+      if (!dragging) {
+        renderPixiFromD3()
+      }
+    })
+
+    // 设置初始位置（靠近关联的核心节点）
+    if (n.x === undefined || n.y === undefined) {
+      const connectedCoreNode = graphData.nodes.find(
+        (cn) =>
+          cn.isCore &&
+          allLinks.some(
+            (l) =>
+              (l.source.id === cn.id && l.target.id === n.id) ||
+              (l.target.id === cn.id && l.source.id === n.id),
+          ),
+      )
+      if (
+        connectedCoreNode &&
+        connectedCoreNode.x !== undefined &&
+        connectedCoreNode.y !== undefined
+      ) {
+        n.x = connectedCoreNode.x + (Math.random() - 0.5) * 50
+        n.y = connectedCoreNode.y + (Math.random() - 0.5) * 50
+      } else {
+        n.x = (Math.random() - 0.5) * width * 0.5
+        n.y = (Math.random() - 0.5) * height * 0.5
+      }
+    }
+
+    nodesContainer.addChild(gfx)
+    labelsContainer.addChild(label)
+
+    // ====== 创建徽章（显示关联边缘节点数量）======
+    let badge: Graphics | undefined = undefined
+    let badgeText: Text | undefined = undefined
+    const edgeCount = n.edgeNodeCount ?? 0
+
+    if (isGlobalGraph && edgeCount > 0) {
+      // 创建徽章背景（增大尺寸使其更明显）
+      badge = new Graphics()
+      const badgeRadius = Math.max(8, Math.min(14, 6 + Math.sqrt(edgeCount) * 2))
+      badge
+        .circle(0, 0, badgeRadius)
+        .fill({ color: computedStyleMap["--secondary"] })
+        .stroke({ width: 1, color: computedStyleMap["--light"] })
+
+      // 创建徽章文字
+      badgeText = new Text({
+        text: edgeCount > 99 ? "99+" : String(edgeCount),
+        style: {
+          fontSize: 10,
+          fontFamily: computedStyleMap["--bodyFont"],
+          fill: computedStyleMap["--light"],
+          fontWeight: "bold",
+        },
+      })
+      badgeText.anchor.set(0.5, 0.5)
+
+      nodesContainer.addChild(badge)
+      labelsContainer.addChild(badgeText)
+    }
+
+    const nodeRenderDatum: NodeRenderData = {
+      simulationData: n,
+      gfx,
+      label,
+      color: color(n),
+      alpha: 1,
+      active: false,
+      badge,
+      badgeText,
+    }
+
+    return nodeRenderDatum
+  }
+
+  // 创建链接渲染对象的辅助函数（使用对象池）
+  function createLinkRenderObject(l: LinkData): LinkRenderData {
+    const gfx = linkGraphicsPool.acquire()
+    linkContainer.addChild(gfx)
+
+    return {
+      simulationData: l,
+      gfx,
+      color: computedStyleMap["--lightgray"],
+      alpha: 1,
+      active: false,
+    }
+  }
+
+  // ====== 手动展开/收起节点的函数 ======
+  // 记录哪些节点已被展开（展开的节点ID集合）
+  const expandedNodeIds = new Set<SimpleSlug>()
+
+  // 展开节点：显示与该节点关联的边缘节点
+  function expandNode(nodeId: SimpleSlug) {
+    if (expandedNodeIds.has(nodeId)) return // 已展开
+
+    const edgeNodesToAdd = nodeToEdgeNodes.get(nodeId) ?? []
+    const edgeLinksToAdd = nodeToEdgeLinks.get(nodeId) ?? []
+
+    if (edgeNodesToAdd.length === 0) return // 没有可展开的边缘节点
+
+    // 找到触发展开的节点，用于设置初始位置
+    const parentNode = graphData.nodes.find((n) => n.id === nodeId)
+
+    // 添加边缘节点
+    for (const edgeNode of edgeNodesToAdd) {
+      // 检查节点是否已存在
+      if (graphData.nodes.some((n) => n.id === edgeNode.id)) continue
+
+      // 设置初始位置（在父节点附近）
+      if (parentNode && parentNode.x !== undefined && parentNode.y !== undefined) {
+        edgeNode.x = parentNode.x + (Math.random() - 0.5) * 80
+        edgeNode.y = parentNode.y + (Math.random() - 0.5) * 80
+      }
+
+      graphData.nodes.push(edgeNode)
+      const renderData = createNodeRenderObject(edgeNode)
+      nodeRenderData.push(renderData)
+    }
+
+    // 添加边缘链接
+    for (const link of edgeLinksToAdd) {
+      // 检查链接是否已存在
+      if (
+        graphData.links.some(
+          (l) => l.source.id === link.source.id && l.target.id === link.target.id,
+        )
+      )
+        continue
+
+      graphData.links.push(link)
+      const renderData = createLinkRenderObject(link)
+      linkRenderData.push(renderData)
+    }
+
+    // 更新展开状态
+    expandedNodeIds.add(nodeId)
+    const nodeData = graphData.nodes.find((n) => n.id === nodeId)
+    if (nodeData) nodeData.isExpanded = true
+
+    // 更新 simulation（使用较小的 alpha 避免大幅度布局变化）
+    simulation.nodes(graphData.nodes)
+    simulation.force("link", forceLink(graphData.links).distance(linkDistance))
+    simulation.alpha(0.1).restart()
+  }
+
+  // 收起节点：隐藏与该节点关联的边缘节点
+  function collapseNode(nodeId: SimpleSlug) {
+    if (!expandedNodeIds.has(nodeId)) return // 未展开
+
+    const edgeNodesToRemove = nodeToEdgeNodes.get(nodeId) ?? []
+
+    // 移除边缘节点（回收到对象池）
+    for (const edgeNode of edgeNodesToRemove) {
+      // 检查该边缘节点是否还被其他展开的节点引用
+      let stillReferenced = false
+      for (const expandedId of expandedNodeIds) {
+        if (expandedId === nodeId) continue
+        const otherEdges = nodeToEdgeNodes.get(expandedId) ?? []
+        if (otherEdges.some((n) => n.id === edgeNode.id)) {
+          stillReferenced = true
+          break
+        }
+      }
+
+      if (stillReferenced) continue // 仍被其他节点引用，不移除
+
+      // 移除渲染对象
+      const renderIdx = nodeRenderData.findIndex((r) => r.simulationData.id === edgeNode.id)
+      if (renderIdx !== -1) {
+        const renderData = nodeRenderData[renderIdx]
+        graphicsPool.release(renderData.gfx)
+        textPool.release(renderData.label)
+        if (renderData.badge) graphicsPool.release(renderData.badge)
+        if (renderData.badgeText) textPool.release(renderData.badgeText)
+        nodeRenderData.splice(renderIdx, 1)
+      }
+
+      // 移除链接
+      for (let i = linkRenderData.length - 1; i >= 0; i--) {
+        const link = linkRenderData[i].simulationData
+        if (link.source.id === edgeNode.id || link.target.id === edgeNode.id) {
+          linkGraphicsPool.release(linkRenderData[i].gfx)
+          linkRenderData.splice(i, 1)
+        }
+      }
+
+      // 从 graphData 移除
+      const nodeIdx = graphData.nodes.findIndex((n) => n.id === edgeNode.id)
+      if (nodeIdx !== -1) graphData.nodes.splice(nodeIdx, 1)
+
+      graphData.links = graphData.links.filter(
+        (l) => l.source.id !== edgeNode.id && l.target.id !== edgeNode.id,
+      )
+    }
+
+    // 更新展开状态
+    expandedNodeIds.delete(nodeId)
+    const nodeData = graphData.nodes.find((n) => n.id === nodeId)
+    if (nodeData) nodeData.isExpanded = false
+
+    // 更新 simulation（使用较小的 alpha 避免大幅度布局变化）
+    simulation.nodes(graphData.nodes)
+    simulation.force("link", forceLink(graphData.links).distance(linkDistance))
+    simulation.alpha(0.05).restart()
+  }
+
+  // 切换节点展开/收起状态
+  function toggleNodeExpansion(nodeId: SimpleSlug) {
+    if (expandedNodeIds.has(nodeId)) {
+      collapseNode(nodeId)
+    } else {
+      expandNode(nodeId)
+    }
+  }
+
   let currentTransform = zoomIdentity
+
+  // ====== 双击检测状态 ======
+  let lastClickTime = 0
+  let lastClickedNodeId: SimpleSlug | null = null
+
   if (enableDrag) {
     select<HTMLCanvasElement, NodeData | undefined>(app.canvas).call(
       drag<HTMLCanvasElement, NodeData | undefined>()
@@ -510,19 +943,61 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
           event.subject.fy = null
           dragging = false
 
-          // if the time between mousedown and mouseup is short, we consider it a click
-          if (Date.now() - dragStartTime < 500) {
-            const node = graphData.nodes.find((n) => n.id === event.subject.id) as NodeData
-            const targ = resolveRelative(fullSlug, node.id)
-            window.spaNavigate(new URL(targ, window.location.toString()))
+          // 短时间内松开 = 点击
+          if (Date.now() - dragStartTime < 300) {
+            const nodeId = event.subject.id as SimpleSlug
+            const now = Date.now()
+
+            // 全局图谱：单击展开/收起，双击跳转
+            if (isGlobalGraph) {
+              if (lastClickedNodeId === nodeId && now - lastClickTime < DOUBLE_CLICK_DELAY) {
+                // 双击：跳转
+                const targ = resolveRelative(fullSlug, nodeId)
+                window.spaNavigate(new URL(targ, window.location.toString()))
+                lastClickedNodeId = null
+                lastClickTime = 0
+              } else {
+                // 单击：展开/收起
+                lastClickedNodeId = nodeId
+                lastClickTime = now
+                toggleNodeExpansion(nodeId)
+              }
+            } else {
+              // 局部图谱：直接跳转
+              const targ = resolveRelative(fullSlug, nodeId)
+              window.spaNavigate(new URL(targ, window.location.toString()))
+            }
           }
         }),
     )
   } else {
+    // 非拖拽模式：绑定点击事件
     for (const node of nodeRenderData) {
+      let clickTimeout: ReturnType<typeof setTimeout> | null = null
+
       node.gfx.on("click", () => {
-        const targ = resolveRelative(fullSlug, node.simulationData.id)
-        window.spaNavigate(new URL(targ, window.location.toString()))
+        const nodeId = node.simulationData.id
+
+        if (isGlobalGraph) {
+          // 全局图谱：单击展开/收起，双击跳转
+          if (clickTimeout) {
+            // 双击：取消单击计时器并跳转
+            clearTimeout(clickTimeout)
+            clickTimeout = null
+            const targ = resolveRelative(fullSlug, nodeId)
+            window.spaNavigate(new URL(targ, window.location.toString()))
+          } else {
+            // 可能是单击：设置计时器
+            clickTimeout = setTimeout(() => {
+              clickTimeout = null
+              toggleNodeExpansion(nodeId)
+            }, DOUBLE_CLICK_DELAY)
+          }
+        } else {
+          // 局部图谱：直接跳转
+          const targ = resolveRelative(fullSlug, nodeId)
+          window.spaNavigate(new URL(targ, window.location.toString()))
+        }
       })
     }
   }
@@ -557,21 +1032,52 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   let stopAnimation = false
   function animate(time: number) {
     if (stopAnimation) return
+
+    // 渲染所有节点
     for (const n of nodeRenderData) {
       const { x, y } = n.simulationData
-      if (!x || !y) continue
-      n.gfx.position.set(x + width / 2, y + height / 2)
+      if (x === undefined || y === undefined) continue
+
+      const posX = x + width / 2
+      const posY = y + height / 2
+      n.gfx.position.set(posX, posY)
       if (n.label) {
-        n.label.position.set(x + width / 2, y + height / 2)
+        n.label.position.set(posX, posY)
+      }
+      // 更新徽章位置（在节点右上角，偏移更大使其更明显）
+      if (n.badge) {
+        const radius = nodeRadius(n.simulationData)
+        n.badge.position.set(posX + radius + 4, posY - radius - 4)
+      }
+      if (n.badgeText) {
+        const radius = nodeRadius(n.simulationData)
+        n.badgeText.position.set(posX + radius + 4, posY - radius - 4)
       }
     }
 
+    // 渲染所有链接
     for (const l of linkRenderData) {
       const linkData = l.simulationData
+      const sourceX = linkData.source.x
+      const sourceY = linkData.source.y
+      const targetX = linkData.target.x
+      const targetY = linkData.target.y
+
+      if (
+        sourceX === undefined ||
+        sourceY === undefined ||
+        targetX === undefined ||
+        targetY === undefined
+      ) {
+        l.gfx.visible = false
+        continue
+      }
+
+      l.gfx.visible = true
       l.gfx.clear()
-      l.gfx.moveTo(linkData.source.x! + width / 2, linkData.source.y! + height / 2)
+      l.gfx.moveTo(sourceX + width / 2, sourceY + height / 2)
       l.gfx
-        .lineTo(linkData.target.x! + width / 2, linkData.target.y! + height / 2)
+        .lineTo(targetX + width / 2, targetY + height / 2)
         .stroke({ alpha: l.alpha, width: 1, color: l.color })
     }
 

@@ -65,6 +65,8 @@ export const CreatedModifiedDate: QuartzTransformerPlugin<Partial<Options>> = (u
             let created: MaybeDate = undefined
             let modified: MaybeDate = undefined
             let published: MaybeDate = undefined
+            let date: MaybeDate = undefined
+            
 
             const fp = file.data.relativePath!
             const fullFp = file.data.filePath!
@@ -76,7 +78,9 @@ export const CreatedModifiedDate: QuartzTransformerPlugin<Partial<Options>> = (u
               } else if (source === "frontmatter" && file.data.frontmatter) {
                 created ||= file.data.frontmatter.created as MaybeDate
                 modified ||= file.data.frontmatter.modified as MaybeDate
+                // 支持 published 或 date 字段（date 作为 published 的别名）
                 published ||= file.data.frontmatter.published as MaybeDate
+                date ||= file.data.frontmatter.date as MaybeDate
               } else if (source === "git" && repo) {
                 try {
                   const relativePath = path.relative(repositoryWorkdir, fullFp)
@@ -96,6 +100,7 @@ export const CreatedModifiedDate: QuartzTransformerPlugin<Partial<Options>> = (u
               created: coerceDate(fp, created),
               modified: coerceDate(fp, modified),
               published: coerceDate(fp, published),
+              date: coerceDate(fp, date),
             }
           }
         },
@@ -110,6 +115,7 @@ declare module "vfile" {
       created: Date
       modified: Date
       published: Date
+      date?: Date
     }
   }
 }

@@ -15,7 +15,8 @@ const config: QuartzConfig = {
     analytics: {
       provider: "plausible",
     },
-    locale: "en-US",
+    // 记得调整语言，有些翻译可能没更新英文版
+    locale: "zh-CN",
     baseUrl: "quartz.jzhao.xyz",
     ignorePatterns: ["private", "templates", ".obsidian"],
     defaultDateType: "modified",
@@ -71,7 +72,7 @@ const config: QuartzConfig = {
       Plugin.TableOfContents(),
       Plugin.CrawlLinks({ markdownLinkResolution: "shortest" }),
       Plugin.Description(),
-      Plugin.Latex({ renderEngine: "katex" }),
+      // Plugin.Latex({ renderEngine: "katex" }),
     ],
     filters: [Plugin.RemoveDrafts()],
     emitters: [
@@ -80,6 +81,7 @@ const config: QuartzConfig = {
       Plugin.ContentPage(),
       Plugin.FolderPage(),
       Plugin.TagPage(),
+      Plugin.VirtualNodePage(),
       Plugin.ContentIndex({
         enableSiteMap: true,
         enableRSS: true,
@@ -89,7 +91,7 @@ const config: QuartzConfig = {
       Plugin.Favicon(),
       Plugin.NotFoundPage(),
       // Comment out CustomOgImages to speed up build time
-      Plugin.CustomOgImages(),
+      // Plugin.CustomOgImages(),
     ],
   },
 }
