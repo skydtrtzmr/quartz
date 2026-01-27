@@ -288,7 +288,7 @@ export async function handleBuild(argv) {
               platform: "browser",
               format: "esm",
               // Drop console and debugger statements
-              drop: ['console', 'debugger'],
+              // drop: ['console', 'debugger'],
             })
             const rawMod = transpiled.outputFiles[0].text
             return {

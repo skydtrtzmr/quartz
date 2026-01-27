@@ -24,7 +24,7 @@ interface ParsedOptions {
   renderThreshold: number
   virtualScrollThreshold: number
   virtualScrollWindowSize: number
-  stickyHeaders: boolean  // 吸顶效果：滚动时父级文件夹标题吸附在顶部
+  stickyHeaders: boolean // 吸顶效果：滚动时父级文件夹标题吸附在顶部
   sortFn: (a: FileTrieNode, b: FileTrieNode) => number
   filterFn: (node: FileTrieNode) => boolean
   mapFn: (node: FileTrieNode) => void
@@ -139,7 +139,8 @@ function createFileNode(
   const clone = template.content.cloneNode(true) as DocumentFragment
   const li = clone.querySelector("li") as HTMLLIElement
   const a = li.querySelector("a") as HTMLAnchorElement
-  a.href = resolveRelative(currentSlug, node.slug)
+  // a.href = resolveRelative(currentSlug, node.slug)
+  a.href = `/${node.slug}`
   a.dataset.for = node.slug
   a.textContent = node.displayName
 
@@ -191,7 +192,8 @@ function createSimpleFolderNode(
   if (opts.folderClickBehavior === "link") {
     const button = titleContainer.querySelector(".folder3-button") as HTMLElement
     const a = document.createElement("a")
-    a.href = resolveRelative(currentSlug, folderPath)
+    // a.href = resolveRelative(currentSlug, folderPath)
+    a.href = `/${node.slug}`
     a.dataset.for = folderPath
     a.textContent = node.displayName
 
@@ -282,17 +284,17 @@ function locateCurrentFile() {
   }
 
   console.log(`%c[定位] 开始定位到: ${currentActiveSlug}`, "color: #00aaff; font-weight: bold")
-  
+
   // 设置导航锁定
   isNavigating = true
   navigateToFile(currentActiveSlug)
-  
+
   // 使用 requestIdleCallback 在浏览器空闲时解锁
   const unlockNavigating = () => {
     isNavigating = false
     console.log(`%c[定位] 浏览器空闲，导航锁定已解除`, "color: #00cc88")
   }
-  
+
   if (typeof requestIdleCallback !== "undefined") {
     requestIdleCallback(unlockNavigating, { timeout: 2000 })
   } else {
@@ -311,15 +313,14 @@ const DEFAULT_ITEM_HEIGHT = 38
  * 从 localStorage 加载展开状态
  */
 function loadExpandedState(): Set<string> {
-
-  // 回退方案：从旧的 fileTree3 迁移
-  const oldState = JSON.parse(localStorage.getItem("fileTree3") || "[]")
+  // 回退方案：从旧的 folderExpandState 迁移
+  const oldState = JSON.parse(localStorage.getItem("folderExpandState") || "[]")
   const expanded = oldState
     .filter((state: FolderState) => !state.collapsed)
     .map((state: FolderState) => state.path)
 
   console.log(
-    `%c[loadExpandedState] 从旧 fileTree3 迁移: ${expanded.length} 个文件夹`,
+    `%c[loadExpandedState] 从旧 folderExpandState 迁移: ${expanded.length} 个文件夹`,
     "color: #ffaa00",
   )
   return new Set(expanded)
@@ -327,7 +328,7 @@ function loadExpandedState(): Set<string> {
 
 /**
  * 保存展开状态到 localStorage
- * 格式：FolderState[]，与 fileTree3 兼容
+ * 格式：FolderState[]，与 folderExpandState 兼容
  */
 function saveExpandedState() {
   if (!currentExplorerState) return
@@ -337,9 +338,9 @@ function saveExpandedState() {
     collapsed: !expandedFolders.has(item.path),
   }))
 
-  localStorage.setItem("fileTree3", JSON.stringify(folderStates))
+  localStorage.setItem("folderExpandState", JSON.stringify(folderStates))
   console.log(
-    `%c[saveExpandedState] 保存到 fileTree3: ${folderStates.length} 个文件夹状态`,
+    `%c[saveExpandedState] 保存到 folderExpandState: ${folderStates.length} 个文件夹状态`,
     "color: #00ff00",
   )
 }
@@ -390,73 +391,6 @@ function flattenTreeRoot(trie: FileTrieNode): FlatNode[] {
     flattenTree(child, 0, "", result)
   })
   return result
-}
-
-/**
- * 获取目标节点的所有父级目录索引
- * @param nodes - 扁平化节点数组
- * @param targetNode - 目标节点
- * @returns 父级节点的索引数组（从子到父排序）
- */
-function getAllParents(nodes: FlatNode[], targetNode: FlatNode | undefined): number[] {
-  if (!targetNode) return []
-
-  const parents: number[] = []
-  const targetLevel = targetNode.level
-
-  // 从目标节点向前查找所有父级
-  for (let i = targetNode.index - 1; i >= 0; i--) {
-    const node = nodes[i]
-    if (node.node.isFolder && node.level < targetLevel) {
-      parents.push(i)
-      if (node.level === 0) break // 到达根级停止
-    }
-  }
-
-  return parents
-}
-
-/**
- * 获取视窗内的节点索引
- * @param nodes - 扁平化节点数组
- * @param viewport - 视窗范围 { start, end }
- * @returns 视窗内节点的索引数组
- */
-function getNodesInViewport(
-  nodes: FlatNode[],
-  viewport: { start: number; end: number },
-): number[] {
-  const result: number[] = []
-  for (let i = viewport.start; i < Math.min(viewport.end, nodes.length); i++) {
-    result.push(i)
-  }
-  return result
-}
-
-/**
- * 计算最终渲染范围：视窗内节点 + 活跃文件的父级目录
- * @param nodes - 扁平化节点数组
- * @param activeSlug - 当前活跃文件的 slug
- * @param viewport - 视窗范围
- * @returns 应该渲染的节点索引数组（已排序）
- */
-function calculateRenderRange(
-  nodes: FlatNode[],
-  activeSlug: string,
-  viewport: { start: number; end: number },
-): number[] {
-  // 1. 找到活跃文件及其所有父级目录
-  const activeNode = nodes.find((n) => n.node.slug === activeSlug && !n.node.isFolder)
-  const requiredParents = getAllParents(nodes, activeNode)
-
-  // 2. 找到视窗内的节点
-  const visibleNodes = getNodesInViewport(nodes, viewport)
-
-  // 3. 合并渲染范围：视窗内节点 + 活跃文件的父级目录
-  const renderSet = new Set([...visibleNodes, ...requiredParents])
-
-  // 返回排序后的索引数组
-  return Array.from(renderSet).sort((a, b) => a - b)
 }
 
 // ========== 步骤 5：吸顶效果相关函数 ==========
@@ -572,8 +506,6 @@ function renderFlatExplorer(
     }
   }
 
-
-
   console.log(
     `%c[renderFlatExplorer] 滚动位置: ${scrollTop}, 渲染范围: [${flatRenderStart}, ${flatRenderEnd})`,
     "color: #00ff00; font-weight: bold",
@@ -643,11 +575,7 @@ function refreshFlatExplorer() {
  * @param currentSlug - 当前页面 slug
  * @param opts - 配置选项
  */
-function setupFlatVirtualScroll(
-  explorerUl: Element,
-  currentSlug: FullSlug,
-  opts: ParsedOptions,
-) {
+function setupFlatVirtualScroll(explorerUl: Element, currentSlug: FullSlug, opts: ParsedOptions) {
   let ticking = false
 
   const handleScroll = () => {
@@ -714,7 +642,8 @@ function updateFlatVirtualScroll(
 
   // 如果范围没有明显变化，不更新（但边界情况除外）
   const threshold = Math.floor(buffer / 2)
-  const needsBoundaryUpdate = (atTop && flatRenderStart !== 0) || (atBottom && flatRenderEnd !== totalCount)
+  const needsBoundaryUpdate =
+    (atTop && flatRenderStart !== 0) || (atBottom && flatRenderEnd !== totalCount)
   if (
     !needsBoundaryUpdate &&
     Math.abs(newStart - flatRenderStart) < threshold &&
@@ -773,8 +702,9 @@ function updateStickyHeaders(
   }
 
   // 检查是否需要更新（比较当前吸顶的文件夹索引）
-  const currentStickyIndices = Array.from(stickyContainer.querySelectorAll("[data-flat-index]"))
-    .map((el) => parseInt((el as HTMLElement).dataset.flatIndex || "-1"))
+  const currentStickyIndices = Array.from(
+    stickyContainer.querySelectorAll("[data-flat-index]"),
+  ).map((el) => parseInt((el as HTMLElement).dataset.flatIndex || "-1"))
 
   if (
     currentStickyIndices.length === stickyIndices.length &&
@@ -803,11 +733,7 @@ function updateStickyHeaders(
  * @param currentSlug - 当前页面 slug
  * @param opts - 配置选项
  */
-function rerenderFlatList(
-  explorerUl: HTMLElement,
-  currentSlug: FullSlug,
-  opts: ParsedOptions,
-) {
+function rerenderFlatList(explorerUl: HTMLElement, currentSlug: FullSlug, opts: ParsedOptions) {
   const totalCount = flatNodes.length
 
   // 更新顶部占位
@@ -875,9 +801,7 @@ function highlightPath(targetElement: Element) {
  */
 function navigateToFile(targetSlug: FullSlug): boolean {
   // 找到目标文件在 flatNodes 中的索引
-  const targetIndex = flatNodes.findIndex(
-    (fn) => fn.node.slug === targetSlug && !fn.node.isFolder,
-  )
+  const targetIndex = flatNodes.findIndex((fn) => fn.node.slug === targetSlug && !fn.node.isFolder)
 
   if (targetIndex === -1) {
     console.log(`%c[导航定位] 未找到目标文件: ${targetSlug}`, "color: #ff0000")
@@ -921,42 +845,11 @@ function navigateToFile(targetSlug: FullSlug): boolean {
 }
 
 /**
- * 初始化 Explorer3 组件
- * 核心入口函数，在每次 nav 事件时调用
- * 负责：解析配置、恢复状态、构建文件树、绑定事件
- * 注意：每次导航都会重新执行，需要处理好状态清理和复用
- * @param currentSlug - 当前页面的 slug
+ * 异步重建 trie 数据（供展开/折叠、定位等交互使用）
+ * 不阻塞 UI 渲染
  */
-async function setupExplorer3(currentSlug: FullSlug) {
-  console.log("[setupExplorer3] Setting up explorer for slug:", currentSlug)
-
-  const allExplorers = document.querySelectorAll("div.explorer3") as NodeListOf<HTMLElement>
-
-  for (const explorer of allExplorers) {
-    const dataFns = JSON.parse(explorer.dataset.dataFns || "{}")
-    const opts: ParsedOptions = {
-      folderClickBehavior: (explorer.dataset.behavior || "collapse") as "collapse" | "link",
-      folderDefaultState: (explorer.dataset.collapsed || "collapsed") as "collapsed" | "open",
-      useSavedState: explorer.dataset.savestate === "true",
-      renderThreshold: parseInt(explorer.dataset.renderthreshold || "0"),
-      virtualScrollThreshold: parseInt(explorer.dataset.virtualscrollthreshold || "200"),
-      virtualScrollWindowSize: parseInt(explorer.dataset.virtualscrollwindowsize || "50"),
-      stickyHeaders: explorer.dataset.stickyheaders !== "false",  // 默认 true
-      order: dataFns.order || ["filter", "map", "sort"],
-      sortFn: new Function("return " + (dataFns.sortFn || "undefined"))(),
-      filterFn: new Function("return " + (dataFns.filterFn || "undefined"))(),
-      mapFn: new Function("return " + (dataFns.mapFn || "undefined"))(),
-    }
-
-    // 保存全局配置
-    globalOpts = opts
-
-    const storageTree = localStorage.getItem("fileTree3")
-    const serializedExplorerState = storageTree && opts.useSavedState ? JSON.parse(storageTree) : []
-    const oldIndex = new Map<string, boolean>(
-      serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
-    )
-
+async function rebuildTrieData(opts: ParsedOptions) {
+  try {
     const data = await fetchData
     const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
     const trie = FileTrieNode.fromEntries(entries)
@@ -975,173 +868,177 @@ async function setupExplorer3(currentSlug: FullSlug) {
       }
     }
 
-    const folderPaths = trie.getFolderPaths()
-    currentExplorerState = folderPaths.map((path) => {
-      const previousState = oldIndex.get(path)
-      return {
-        path,
-        collapsed:
-          previousState === undefined ? opts.folderDefaultState === "collapsed" : previousState,
-      }
-    })
-
-    const explorerUl = explorer.querySelector(".explorer3-ul")
-    if (!explorerUl) continue
-
-    // 设置全局引用（用于 refreshFlatExplorer）
     currentTrie = trie
-    currentExplorerUl = explorerUl
-    currentActiveSlug = currentSlug
-
-    // 清空旧内容（SPA 导航时可能存在旧节点）
-    // 保留 OverflowList 组件的结构，只清空文件树节点
-    const existingNodes = explorerUl.querySelectorAll(":scope > li")
-    existingNodes.forEach((node) => node.remove())
-
-
-    // ========== 步骤 2：状态管理初始化 ==========
-    // 从 localStorage 加载展开状态（新方式）
-    const savedExpandedFolders = loadExpandedState()
-
-    // 从 currentExplorerState 初始化（兼容旧方式）
-    const stateExpandedFolders = new Set(
-      currentExplorerState.filter((item) => !item.collapsed).map((item) => item.path),
-    )
-
-    // 合并两种来源
-    expandedFolders = new Set([...savedExpandedFolders, ...stateExpandedFolders])
-
-    // 自动展开当前路径上的所有父级文件夹
-    const currentPathParts = currentSlug.split("/")
-    for (let i = 1; i < currentPathParts.length; i++) {
-      const ancestorPath = currentPathParts.slice(0, i).join("/") + "/index"
-      // 检查这个路径是否是一个文件夹
-      const folderState = currentExplorerState.find((item) => item.path === ancestorPath)
-      if (folderState) {
-        expandedFolders.add(ancestorPath)
-      }
-    }
-    // 也检查直接的父文件夹路径（不带 /index）
-    for (let i = 1; i <= currentPathParts.length; i++) {
-      const ancestorPath = currentPathParts.slice(0, i).join("/")
-      const folderState = currentExplorerState.find((item) =>
-        item.path === ancestorPath || item.path === ancestorPath + "/index"
-      )
-      if (folderState) {
-        expandedFolders.add(folderState.path)
-      }
-    }
-
-    // 保存合并后的状态
-    saveExpandedState()
-
-    // 生成扁平化数据
     flatNodes = flattenTreeRoot(trie)
 
-    // 计算文件夹范围（仅在启用吸顶效果时）
     if (opts.stickyHeaders) {
       folderRanges = calculateFolderRanges(flatNodes)
     }
 
-    // 测试日志
-    console.group("%c[步骤 1-2 测试] 扁平化数据层 + 状态管理", "color: #00ffff; font-weight: bold; font-size: 14px")
+    console.log("[rebuildTrieData] 异步重建完成，flatNodes:", flatNodes.length)
+  } catch (e) {
+    console.warn("[rebuildTrieData] 失败:", e)
+  }
+}
 
-    // 调试：检查 trie 根节点
-    console.log(`%c[调试] trie.children 数量: ${trie.children.length}`, "color: #ff0000; font-weight: bold")
-    console.log(`[调试] trie 根级节点:`)
-    trie.children.slice(0, 20).forEach((child, i) => {
-      const type = child.isFolder ? "📁" : "📄"
-      const childCount = child.isFolder ? ` (${child.children.length} 子节点)` : ""
-      console.log(`   ${i}. ${type} ${child.displayName} (${child.slug})${childCount}`)
-    })
-    if (trie.children.length > 20) {
-      console.log(`   ... 还有 ${trie.children.length - 20} 个节点`)
+/**
+ * 从缓存恢复 Explorer UI
+ */
+function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
+  explorerUl.innerHTML = sessionStorage.getItem("explorer3Html") || ""
+  explorerUl.scrollTop = parseInt(sessionStorage.getItem("explorer3ScrollTop") || "0")
+  flatRenderStart = parseInt(sessionStorage.getItem("explorer3RenderStart") || "0")
+  flatRenderEnd = parseInt(sessionStorage.getItem("explorer3RenderEnd") || "0")
+  try {
+    expandedFolders = new Set(
+      JSON.parse(sessionStorage.getItem("explorer3ExpandedFolders") || "[]"),
+    )
+  } catch {
+    expandedFolders = new Set()
+  }
+
+  // 更新 active 状态
+  const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
+  if (currentLink) {
+    highlightPath(currentLink)
+  }
+
+  console.log("[restoreFromCache] 恢复完成")
+}
+
+/**
+ * 初始化 Explorer3 组件
+ * 核心入口函数，在每次 nav 事件时调用
+ * 有缓存时快速恢复，无缓存时完整初始化
+ */
+async function setupExplorer3(currentSlug: FullSlug) {
+  console.log("[setupExplorer3] Setting up explorer for slug:", currentSlug)
+
+  const allExplorers = document.querySelectorAll("div.explorer3") as NodeListOf<HTMLElement>
+
+  for (const explorer of allExplorers) {
+    const dataFns = JSON.parse(explorer.dataset.dataFns || "{}")
+    const opts: ParsedOptions = {
+      folderClickBehavior: (explorer.dataset.behavior || "collapse") as "collapse" | "link",
+      folderDefaultState: (explorer.dataset.collapsed || "collapsed") as "collapsed" | "open",
+      useSavedState: explorer.dataset.savestate === "true",
+      renderThreshold: parseInt(explorer.dataset.renderthreshold || "0"),
+      virtualScrollThreshold: parseInt(explorer.dataset.virtualscrollthreshold || "200"),
+      virtualScrollWindowSize: parseInt(explorer.dataset.virtualscrollwindowsize || "50"),
+      stickyHeaders: explorer.dataset.stickyheaders !== "false",
+      order: dataFns.order || ["filter", "map", "sort"],
+      sortFn: new Function("return " + (dataFns.sortFn || "undefined"))(),
+      filterFn: new Function("return " + (dataFns.filterFn || "undefined"))(),
+      mapFn: new Function("return " + (dataFns.mapFn || "undefined"))(),
     }
-    console.log(`0. 状态来源: savedExpandedFolders=${savedExpandedFolders.size}, stateExpandedFolders=${stateExpandedFolders.size}`)
-    console.log(`1. expandedFolders 数量: ${expandedFolders.size}`)
-    console.log(`2. expandedFolders 内容 (前10个):`, Array.from(expandedFolders).slice(0, 10))
-    console.log(`3. flatNodes 总数: ${flatNodes.length}`)
 
-    const folderCount = flatNodes.filter((n) => n.node.isFolder).length
-    const fileCount = flatNodes.filter((n) => !n.node.isFolder).length
-    console.log(`   - 文件夹: ${folderCount}`)
-    console.log(`   - 文件: ${fileCount}`)
+    // 保存全局配置
+    globalOpts = opts
 
-    // 显示前 10 个节点
-    console.log("4. 前 10 个扁平节点:")
-    flatNodes.slice(0, 10).forEach((fn, i) => {
-      const type = fn.node.isFolder ? "📁" : "📄"
-      const indent = "  ".repeat(fn.level)
-      console.log(`   ${i}. ${type} L${fn.level} ${indent}${fn.node.displayName} (${fn.node.slug})`)
-    })
+    const explorerUl = explorer.querySelector(".explorer3-ul")
+    if (!explorerUl) continue
 
-    // 测试 getAllParents
-    const testFileNode = flatNodes.find((n) => !n.node.isFolder)
-    if (testFileNode) {
-      const parents = getAllParents(flatNodes, testFileNode)
-      console.log(`5. 测试 getAllParents - 文件: ${testFileNode.node.displayName}`)
-      console.log(`   父级索引: [${parents.join(", ")}]`)
-      parents.forEach((idx) => {
-        const p = flatNodes[idx]
-        console.log(`   - ${p.node.displayName} (level ${p.level})`)
-      })
-    }
+    // 设置全局引用
+    currentActiveSlug = currentSlug
+    currentExplorerUl = explorerUl
 
-    // 测试 calculateRenderRange
-    const testViewport = { start: 0, end: 20 }
-    const renderIndices = calculateRenderRange(flatNodes, currentSlug, testViewport)
-    console.log(`6. 测试 calculateRenderRange - viewport [0, 20], activeSlug: ${currentSlug}`)
-    console.log(`   渲染索引数量: ${renderIndices.length}`)
-    console.log(`   渲染索引: [${renderIndices.slice(0, 20).join(", ")}${renderIndices.length > 20 ? "..." : ""}]`)
+    // 场景判断：
+    // 1. 当前 DOM 有真实节点 → SPA 跳转，直接用 DOM，只更新 active
+    // 2. 当前 DOM 无节点但缓存有真实内容 → 从缓存恢复
+    // 3. 缓存也没有真实内容 → 首次加载，完整渲染
+    const cachedHtml = sessionStorage.getItem("explorer3Html")
+    const hasRealContentInDom = explorerUl.querySelectorAll("li[data-flat-index]").length > 0
+    const hasRealContentInCache = cachedHtml && cachedHtml.includes("data-flat-index")
 
-    // 初始化渲染范围（步骤 4 使用）
-    flatRenderStart = 0
-    flatRenderEnd = Math.min(50, flatNodes.length)
-    console.log(`7. 初始化渲染范围: [${flatRenderStart}, ${flatRenderEnd})`)
+    console.log(
+      `[setupExplorer3] hasRealContentInDom=${hasRealContentInDom}, hasRealContentInCache=${hasRealContentInCache}`,
+    )
 
-    // ========== 步骤 3 测试：渲染层改造 ==========
-    console.log("%c--- 步骤 3 测试：渲染层改造 ---", "color: #ff6600; font-weight: bold")
+    if (hasRealContentInDom) {
+      // ========== SPA 跳转：DOM 非空，直接用，只更新 active ==========
+      console.log("[setupExplorer3] SPA 跳转，DOM 非空，只更新 active")
+      const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
+      if (currentLink) {
+        highlightPath(currentLink)
+      } else {
+        clearHighlight()
+        console.log("[setupExplorer3] 当前页面不在渲染范围内，已清除 active")
+      }
+    } else if (hasRealContentInCache) {
+      // ========== 从缓存恢复 ==========
+      console.log("[setupExplorer3] 从缓存恢复")
+      restoreFromCache(explorerUl, currentSlug)
 
-    // 测试 createFlatNode - 创建前 5 个扁平节点
-    const testFlatNodes = flatNodes.slice(0, Math.min(5, flatNodes.length))
-    console.log(`8. 测试 createFlatNode - 创建 ${testFlatNodes.length} 个节点:`)
-    testFlatNodes.forEach((flatNode) => {
-      const li = createFlatNode(flatNode, currentSlug, opts)
-      const type = flatNode.node.isFolder ? "📁" : "📄"
-      const indentEl = flatNode.node.isFolder
-        ? li.querySelector(".folder3-container")
-        : li.querySelector("a")
-      const paddingLeft = (indentEl as HTMLElement)?.style.paddingLeft || "default"
-      console.log(
-        `   [${type}] L${flatNode.level} ${flatNode.node.displayName} - flatIndex=${li.dataset.flatIndex}, paddingLeft=${paddingLeft}`,
+      // 检查当前页面是否在渲染范围内
+      const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
+      if (!currentLink) {
+        clearHighlight()
+        console.log("[setupExplorer3] 当前页面不在渲染范围内，已清除 active")
+      }
+    } else {
+      // ========== 首次加载：完整初始化 ==========
+      console.log("[setupExplorer3] 首次加载，完整初始化")
+
+      // 后台异步重建 trie（供展开/折叠使用）
+      // 加载状态
+      const storageTree = localStorage.getItem("folderExpandState")
+      const serializedExplorerState =
+        storageTree && opts.useSavedState ? JSON.parse(storageTree) : []
+      const oldIndex = new Map<string, boolean>(
+        serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
       )
-    })
 
-    console.groupEnd()
+      await rebuildTrieData(opts)
 
-    // ========== 扁平化渲染 ==========
-    // 清空旧的占位元素
-    const oldTopSpacer = explorerUl.querySelector(".virtual-spacer-top")
-    const oldBottomSpacer = explorerUl.querySelector(".virtual-spacer-bottom")
-    const oldStickyHeaders = explorerUl.querySelector(".sticky-headers")
-    if (oldTopSpacer) oldTopSpacer.remove()
-    if (oldBottomSpacer) oldBottomSpacer.remove()
-    if (oldStickyHeaders) oldStickyHeaders.remove()
+      const folderPaths = currentTrie!.getFolderPaths()
+      currentExplorerState = folderPaths.map((path) => {
+        const previousState = oldIndex.get(path)
+        return {
+          path,
+          collapsed:
+            previousState === undefined ? opts.folderDefaultState === "collapsed" : previousState,
+        }
+      })
 
-    // 获取保存的滚动位置（用于计算初始渲染范围）
-    const savedScrollTop = sessionStorage.getItem("explorer3ScrollTop")
-    const initialScrollTop = savedScrollTop ? parseInt(savedScrollTop) : 0
+      // 初始化展开状态
+      const savedExpandedFolders = loadExpandedState()
+      const stateExpandedFolders = new Set(
+        currentExplorerState.filter((item) => !item.collapsed).map((item) => item.path),
+      )
+      expandedFolders = new Set([...savedExpandedFolders, ...stateExpandedFolders])
 
-    // 使用扁平化数据渲染（传入滚动位置以计算正确的初始渲染范围）
-    renderFlatExplorer(explorerUl, currentSlug, opts, initialScrollTop)
+      // 自动展开当前路径上的父级文件夹
+      const currentPathParts = currentSlug.split("/")
+      for (let i = 1; i < currentPathParts.length; i++) {
+        const ancestorPath = currentPathParts.slice(0, i).join("/") + "/index"
+        const folderState = currentExplorerState.find((item) => item.path === ancestorPath)
+        if (folderState) expandedFolders.add(ancestorPath)
+      }
+      for (let i = 1; i <= currentPathParts.length; i++) {
+        const ancestorPath = currentPathParts.slice(0, i).join("/")
+        const folderState = currentExplorerState.find(
+          (item) => item.path === ancestorPath || item.path === ancestorPath + "/index",
+        )
+        if (folderState) expandedFolders.add(folderState.path)
+      }
 
-    // 设置单滚动条虚拟滚动监听
-    setupFlatVirtualScroll(explorerUl, currentSlug, opts)
+      saveExpandedState()
 
-    // 恢复滚动位置
-    if (savedScrollTop) {
+      // 渲染
+      const oldTopSpacer = explorerUl.querySelector(".virtual-spacer-top")
+      const oldBottomSpacer = explorerUl.querySelector(".virtual-spacer-bottom")
+      const oldStickyHeaders = explorerUl.querySelector(".sticky-headers")
+      if (oldTopSpacer) oldTopSpacer.remove()
+      if (oldBottomSpacer) oldBottomSpacer.remove()
+      if (oldStickyHeaders) oldStickyHeaders.remove()
+
+      const initialScrollTop = parseInt(sessionStorage.getItem("explorer3ScrollTop") || "0")
+      renderFlatExplorer(explorerUl, currentSlug, opts, initialScrollTop)
       explorerUl.scrollTop = initialScrollTop
     }
+
+    // 共同设置：虚拟滚动监听
+    setupFlatVirtualScroll(explorerUl as HTMLElement, currentSlug, opts)
 
     // 首次加载时禁用虚拟滚动更新
     isNavigating = true
@@ -1161,7 +1058,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
       window.addCleanup(() => locateBtn.removeEventListener("click", locateCurrentFile))
     }
 
-    // 事件监听
+    // Explorer 切换事件
     const explorerButtons = explorer.getElementsByClassName(
       "explorer3-toggle",
     ) as HTMLCollectionOf<HTMLElement>
@@ -1170,6 +1067,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
       window.addCleanup(() => button.removeEventListener("click", toggleExplorer))
     }
 
+    // 文件夹点击事件
     if (opts.folderClickBehavior === "collapse") {
       const folderButtons = explorer.getElementsByClassName(
         "folder3-button",
@@ -1194,8 +1092,13 @@ async function setupExplorer3(currentSlug: FullSlug) {
 document.addEventListener("prenav", async () => {
   const explorerUl = document.querySelector(".explorer3-ul")
   if (!explorerUl) return
+
+  // 保存各个数据到独立的 sessionStorage 键
+  sessionStorage.setItem("explorer3Html", explorerUl.innerHTML)
   sessionStorage.setItem("explorer3ScrollTop", explorerUl.scrollTop.toString())
-  console.log(`%c[prenav] 保存滚动位置: ${explorerUl.scrollTop}`, "color: #888")
+  sessionStorage.setItem("explorer3RenderStart", flatRenderStart.toString())
+  sessionStorage.setItem("explorer3RenderEnd", flatRenderEnd.toString())
+  sessionStorage.setItem("explorer3ExpandedFolders", JSON.stringify(Array.from(expandedFolders)))
 })
 
 document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
@@ -1226,4 +1129,3 @@ window.addEventListener("resize", function () {
     return
   }
 })
-
