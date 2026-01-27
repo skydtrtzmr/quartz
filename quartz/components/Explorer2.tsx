@@ -78,12 +78,12 @@ export default ((userOpts?: Partial<Options>) => {
     const opts: Options = { ...defaultOptions, ...userOpts }
     const { OverflowList, overflowListAfterDOMLoaded } = OverflowListFactory()
 
-    const Explorer3: QuartzComponent = ({ cfg, displayClass }: QuartzComponentProps) => {
-        const id = `explorer3-${numExplorers++}`
+    const Explorer2: QuartzComponent = ({ cfg, displayClass }: QuartzComponentProps) => {
+        const id = `explorer2-${numExplorers++}`
 
         return (
             <div
-                class={classNames(displayClass, "explorer3")}
+                class={classNames(displayClass, "explorer2")}
                 data-behavior={opts.folderClickBehavior}
                 data-collapsed={opts.folderDefaultState}
                 data-savestate={opts.useSavedState}
@@ -102,7 +102,7 @@ export default ((userOpts?: Partial<Options>) => {
             >
                 <button
                     type="button"
-                    class="explorer3-toggle mobile-explorer hide-until-loaded"
+                    class="explorer2-toggle mobile-explorer hide-until-loaded"
                     data-mobile={true}
                     aria-controls={id}
                 >
@@ -123,7 +123,7 @@ export default ((userOpts?: Partial<Options>) => {
                 </button>
                 <button
                     type="button"
-                    class="title-button explorer3-toggle desktop-explorer"
+                    class="title-button explorer2-toggle desktop-explorer"
                     data-mobile={false}
                     aria-expanded={true}
                 >
@@ -143,8 +143,8 @@ export default ((userOpts?: Partial<Options>) => {
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                 </button>
-                <div id={id} class="explorer3-content" aria-expanded={false} role="group">
-                    <OverflowList class="explorer3-ul" />
+                <div id={id} class="explorer2-content" aria-expanded={false} role="group">
+                    <OverflowList class="explorer2-ul" />
                     {/* TODO 暂时注释掉定位按钮，以后再做。 */}
                     {/* <button type="button" class="locate-current-btn" title="定位到当前文件">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -192,7 +192,7 @@ export default ((userOpts?: Partial<Options>) => {
         )
     }
 
-    Explorer3.css = style
-    Explorer3.afterDOMLoaded = concatenateResources(script, overflowListAfterDOMLoaded)
-    return Explorer3
+    Explorer2.css = style
+    Explorer2.afterDOMLoaded = concatenateResources(script, overflowListAfterDOMLoaded)
+    return Explorer2
 }) satisfies QuartzComponentConstructor

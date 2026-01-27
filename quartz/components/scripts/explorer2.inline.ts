@@ -66,7 +66,7 @@ let currentExplorerUl: Element | null = null // 当前 Explorer UL 元素
  * @this HTMLElement - 触发点击的按钮元素
  */
 function toggleExplorer(this: HTMLElement) {
-  const nearestExplorer = this.closest(".explorer3") as HTMLElement
+  const nearestExplorer = this.closest(".explorer2") as HTMLElement
   if (!nearestExplorer) return
   const explorerCollapsed = nearestExplorer.classList.toggle("collapsed")
   nearestExplorer.setAttribute(
@@ -301,8 +301,8 @@ function locateCurrentFile() {
 }
 
 // 默认文件项高度（px）
-// 注意：此值必须与 explorer3.scss 中的 li 高度 (28px) 保持一致
-// 如果修改此处，请同步修改 explorer3.scss 中的 li { height: 28px }
+// 注意：此值必须与 explorer2.scss 中的 li 高度 (28px) 保持一致
+// 如果修改此处，请同步修改 explorer2.scss 中的 li { height: 28px }
 const DEFAULT_ITEM_HEIGHT = 38
 
 // ========== 步骤 2：状态管理函数 ==========
@@ -845,10 +845,10 @@ function rerenderFlatList(
  * 清除所有高亮状态
  */
 function clearHighlight() {
-  const activeElements = document.querySelectorAll(".explorer3 .active")
+  const activeElements = document.querySelectorAll(".explorer2 .active")
   activeElements.forEach((el) => el.classList.remove("active"))
 
-  const pathElements = document.querySelectorAll(".explorer3 .in-active-path")
+  const pathElements = document.querySelectorAll(".explorer2 .in-active-path")
   pathElements.forEach((el) => el.classList.remove("in-active-path"))
 }
 
@@ -921,16 +921,16 @@ function navigateToFile(targetSlug: FullSlug): boolean {
 }
 
 /**
- * 初始化 Explorer3 组件
+ * 初始化 Explorer2 组件
  * 核心入口函数，在每次 nav 事件时调用
  * 负责：解析配置、恢复状态、构建文件树、绑定事件
  * 注意：每次导航都会重新执行，需要处理好状态清理和复用
  * @param currentSlug - 当前页面的 slug
  */
-async function setupExplorer3(currentSlug: FullSlug) {
-  console.log("[setupExplorer3] Setting up explorer for slug:", currentSlug)
+async function setupExplorer2(currentSlug: FullSlug) {
+  console.log("[setupExplorer2] Setting up explorer for slug:", currentSlug)
 
-  const allExplorers = document.querySelectorAll("div.explorer3") as NodeListOf<HTMLElement>
+  const allExplorers = document.querySelectorAll("div.explorer2") as NodeListOf<HTMLElement>
 
   for (const explorer of allExplorers) {
     const dataFns = JSON.parse(explorer.dataset.dataFns || "{}")
@@ -985,7 +985,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
       }
     })
 
-    const explorerUl = explorer.querySelector(".explorer3-ul")
+    const explorerUl = explorer.querySelector(".explorer2-ul")
     if (!explorerUl) continue
 
     // 设置全局引用（用于 refreshFlatExplorer）
@@ -1129,7 +1129,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
     if (oldStickyHeaders) oldStickyHeaders.remove()
 
     // 获取保存的滚动位置（用于计算初始渲染范围）
-    const savedScrollTop = sessionStorage.getItem("explorer3ScrollTop")
+    const savedScrollTop = sessionStorage.getItem("explorer2ScrollTop")
     const initialScrollTop = savedScrollTop ? parseInt(savedScrollTop) : 0
 
     // 使用扁平化数据渲染（传入滚动位置以计算正确的初始渲染范围）
@@ -1163,7 +1163,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // 事件监听
     const explorerButtons = explorer.getElementsByClassName(
-      "explorer3-toggle",
+      "explorer2-toggle",
     ) as HTMLCollectionOf<HTMLElement>
     for (const button of explorerButtons) {
       button.addEventListener("click", toggleExplorer)
@@ -1192,9 +1192,9 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
 // 步骤 4：保存滚动位置（参考 explorer2）
 document.addEventListener("prenav", async () => {
-  const explorerUl = document.querySelector(".explorer3-ul")
+  const explorerUl = document.querySelector(".explorer2-ul")
   if (!explorerUl) return
-  sessionStorage.setItem("explorer3ScrollTop", explorerUl.scrollTop.toString())
+  sessionStorage.setItem("explorer2ScrollTop", explorerUl.scrollTop.toString())
   console.log(`%c[prenav] 保存滚动位置: ${explorerUl.scrollTop}`, "color: #888")
 })
 
@@ -1203,9 +1203,9 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
   currentActiveSlug = currentSlug // 保存当前活跃文件
   console.log(`%c[NAV事件] 导航到: ${currentSlug}`, "color: #ff00ff; font-weight: bold")
 
-  await setupExplorer3(currentSlug)
+  await setupExplorer2(currentSlug)
 
-  for (const explorer of document.getElementsByClassName("explorer3")) {
+  for (const explorer of document.getElementsByClassName("explorer2")) {
     const mobileExplorer = explorer.querySelector(".mobile-explorer")
     if (!mobileExplorer) continue
 
@@ -1220,7 +1220,7 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
 })
 
 window.addEventListener("resize", function () {
-  const explorer = document.querySelector(".explorer3")
+  const explorer = document.querySelector(".explorer2")
   if (explorer && !explorer.classList.contains("collapsed")) {
     document.documentElement.classList.add("mobile-no-scroll")
     return

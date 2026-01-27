@@ -3,16 +3,16 @@
 @media all and ($mobile) {
   .page > #quartz-body {
     // Shift page position when toggling Explorer on mobile.
-    & > :not(.sidebar.left:has(.explorer3)) {
+    & > :not(.sidebar.left:has(.explorer2)) {
       transition: transform 300ms ease-in-out;
     }
-    &.lock-scroll > :not(.sidebar.left:has(.explorer3)) {
+    &.lock-scroll > :not(.sidebar.left:has(.explorer2)) {
       transform: translateX(100dvw);
       transition: transform 300ms ease-in-out;
     }
 
     // Sticky top bar (stays in place when scrolling down on mobile).
-    .sidebar.left:has(.explorer3) {
+    .sidebar.left:has(.explorer2) {
       box-sizing: border-box;
       position: sticky;
       background-color: var(--light);
@@ -20,13 +20,13 @@
       margin: 0;
     }
 
-    .hide-until-loaded ~ .explorer3-content {
+    .hide-until-loaded ~ .explorer2-content {
       display: none;
     }
   }
 }
 
-.explorer3 {
+.explorer2 {
   display: flex;
   flex-direction: column;
   overflow-y: hidden;
@@ -117,7 +117,7 @@ button.desktop-explorer {
   }
 }
 
-.explorer3-content {
+.explorer2-content {
   list-style: none;
   overflow: hidden;
   overflow-y: auto;
@@ -169,8 +169,8 @@ button.desktop-explorer {
     max-width: 100%;
 
     // ========== 统一列表项行高 ==========
-    // 注意：此值必须与 explorer3.inline.ts 中的 DEFAULT_ITEM_HEIGHT (38px) 保持一致
-    // 如果修改此处，请同步修改 explorer3.inline.ts 中的 DEFAULT_ITEM_HEIGHT
+    // 注意：此值必须与 explorer2.inline.ts 中的 DEFAULT_ITEM_HEIGHT (38px) 保持一致
+    // 如果修改此处，请同步修改 explorer2.inline.ts 中的 DEFAULT_ITEM_HEIGHT
     & li {
       height: 38px;
       min-height: 38px;
@@ -446,12 +446,12 @@ li:has(> .folder3-outer.open) > .folder3-container > svg {
   transform: rotate(90deg);
 }
 
-.explorer3 {
+.explorer2 {
   @media all and ($mobile) {
     &.collapsed {
       flex: 0 0 34px;
 
-      & > .explorer3-content {
+      & > .explorer2-content {
         transform: translateX(-100vw);
         visibility: hidden;
       }
@@ -460,13 +460,13 @@ li:has(> .folder3-outer.open) > .folder3-container > svg {
     &:not(.collapsed) {
       flex: 0 0 34px;
 
-      & > .explorer3-content {
+      & > .explorer2-content {
         transform: translateX(0);
         visibility: visible;
       }
     }
 
-    .explorer3-content {
+    .explorer2-content {
       box-sizing: border-box;
       z-index: 100;
       position: absolute;
@@ -547,8 +547,8 @@ li:has(> .folder3-outer.open) > .folder3-container > svg {
   display: none;
 }
 
-// 确保 explorer3-ul 可以滚动
-.explorer3-ul {
+// 确保 explorer2-ul 可以滚动
+.explorer2-ul {
   overflow-y: auto;
   overflow-x: hidden;
   max-height: calc(100vh - 200px);
