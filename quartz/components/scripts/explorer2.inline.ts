@@ -519,27 +519,27 @@ function calculateFolderRanges(nodes: FlatNode[]): Map<string, FolderRange> {
  * @param viewportEnd - 视窗结束索引
  * @returns 应该吸顶的文件夹索引数组（按层级排序，level 小的在前）
  */
-function calculateStickyFolders(
-  nodes: FlatNode[],
-  ranges: Map<string, FolderRange>,
-  viewportStart: number,
-  _viewportEnd: number, // 保留供将来使用
-): number[] {
-  const stickyIndices: number[] = []
+// function calculateStickyFolders(
+//   nodes: FlatNode[],
+//   ranges: Map<string, FolderRange>,
+//   viewportStart: number,
+//   _viewportEnd: number, // 保留供将来使用
+// ): number[] {
+//   const stickyIndices: number[] = []
 
-  for (const [, range] of ranges) {
-    // 条件1: 文件夹标题已经滚出视窗顶部（start < viewportStart）
-    // 条件2: 文件夹的内容还在视窗内（end >= viewportStart）
-    if (range.start < viewportStart && range.end >= viewportStart) {
-      stickyIndices.push(range.start)
-    }
-  }
+//   for (const [, range] of ranges) {
+//     // 条件1: 文件夹标题已经滚出视窗顶部（start < viewportStart）
+//     // 条件2: 文件夹的内容还在视窗内（end >= viewportStart）
+//     if (range.start < viewportStart && range.end >= viewportStart) {
+//       stickyIndices.push(range.start)
+//     }
+//   }
 
-  // 按层级排序：level 小的在前（顶部），level 大的在后（靠近内容）
-  stickyIndices.sort((a, b) => nodes[a].level - nodes[b].level)
+//   // 按层级排序：level 小的在前（顶部），level 大的在后（靠近内容）
+//   stickyIndices.sort((a, b) => nodes[a].level - nodes[b].level)
 
-  return stickyIndices
-}
+//   return stickyIndices
+// }
 
 // ========== 步骤 4：单滚动条虚拟滚动函数 ==========
 
@@ -556,6 +556,8 @@ function renderFlatExplorer(
   opts: ParsedOptions,
   scrollTop: number = 0,
 ) {
+  console.log('[renderFlatExplorer] 渲染文件夹树');
+
   // 清空现有内容
   explorerUl.innerHTML = ""
 
@@ -585,11 +587,11 @@ function renderFlatExplorer(
   )
 
   // 创建吸顶容器（仅在启用时创建）
-  if (opts.stickyHeaders) {
-    const stickyContainer = document.createElement("div")
-    stickyContainer.className = "sticky-headers"
-    explorerUl.appendChild(stickyContainer)
-  }
+  // if (opts.stickyHeaders) {
+  //   const stickyContainer = document.createElement("div")
+  //   stickyContainer.className = "sticky-headers"
+  //   explorerUl.appendChild(stickyContainer)
+  // }
 
   // 创建顶部占位元素
   const topSpacer = document.createElement("div")
@@ -624,11 +626,12 @@ function refreshFlatExplorer() {
 
   // 重新扁平化树（使用更新后的 expandedFolders）
   flatNodes = flattenTreeRoot(currentTrie)
+  sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
 
   // 重新计算文件夹范围（仅在启用吸顶效果时）
-  if (globalOpts.stickyHeaders) {
-    folderRanges = calculateFolderRanges(flatNodes)
-  }
+  // if (globalOpts.stickyHeaders) {
+  //   folderRanges = calculateFolderRanges(flatNodes)
+  // }
 
   console.log(
     `%c[refreshFlatExplorer] 重新扁平化: ${flatNodes.length} 个节点, expandedFolders: ${expandedFolders.size}${globalOpts.stickyHeaders ? `, folderRanges: ${folderRanges.size}` : ""}`,
@@ -741,9 +744,9 @@ function updateFlatVirtualScroll(
   rerenderFlatList(explorerUl, currentSlug, opts)
 
   // 更新吸顶文件夹（仅在启用时）
-  if (opts.stickyHeaders) {
-    updateStickyHeaders(explorerUl, currentSlug, opts, visibleStart)
-  }
+  // if (opts.stickyHeaders) {
+  //   updateStickyHeaders(explorerUl, currentSlug, opts, visibleStart)
+  // }
 }
 
 /**
@@ -753,54 +756,54 @@ function updateFlatVirtualScroll(
  * @param opts - 配置选项
  * @param viewportStart - 视窗起始索引
  */
-function updateStickyHeaders(
-  explorerUl: HTMLElement,
-  currentSlug: FullSlug,
-  opts: ParsedOptions,
-  viewportStart: number,
-) {
-  const stickyContainer = explorerUl.querySelector(".sticky-headers") as HTMLElement
-  if (!stickyContainer) return
+// function updateStickyHeaders(
+//   explorerUl: HTMLElement,
+//   currentSlug: FullSlug,
+//   opts: ParsedOptions,
+//   viewportStart: number,
+// ) {
+//   const stickyContainer = explorerUl.querySelector(".sticky-headers") as HTMLElement
+//   if (!stickyContainer) return
 
-  // 计算应该吸顶的文件夹
-  const stickyIndices = calculateStickyFolders(
-    flatNodes,
-    folderRanges,
-    viewportStart,
-    viewportStart + Math.ceil(explorerUl.clientHeight / DEFAULT_ITEM_HEIGHT),
-  )
+//   // 计算应该吸顶的文件夹
+//   const stickyIndices = calculateStickyFolders(
+//     flatNodes,
+//     folderRanges,
+//     viewportStart,
+//     viewportStart + Math.ceil(explorerUl.clientHeight / DEFAULT_ITEM_HEIGHT),
+//   )
 
-  // 如果没有需要吸顶的文件夹，清空容器
-  if (stickyIndices.length === 0) {
-    stickyContainer.innerHTML = ""
-    stickyContainer.style.display = "none"
-    return
-  }
+//   // 如果没有需要吸顶的文件夹，清空容器
+//   if (stickyIndices.length === 0) {
+//     stickyContainer.innerHTML = ""
+//     stickyContainer.style.display = "none"
+//     return
+//   }
 
-  // 检查是否需要更新（比较当前吸顶的文件夹索引）
-  const currentStickyIndices = Array.from(stickyContainer.querySelectorAll("[data-flat-index]"))
-    .map((el) => parseInt((el as HTMLElement).dataset.flatIndex || "-1"))
+//   // 检查是否需要更新（比较当前吸顶的文件夹索引）
+//   const currentStickyIndices = Array.from(stickyContainer.querySelectorAll("[data-flat-index]"))
+//     .map((el) => parseInt((el as HTMLElement).dataset.flatIndex || "-1"))
 
-  if (
-    currentStickyIndices.length === stickyIndices.length &&
-    currentStickyIndices.every((idx, i) => idx === stickyIndices[i])
-  ) {
-    return // 无需更新
-  }
+//   if (
+//     currentStickyIndices.length === stickyIndices.length &&
+//     currentStickyIndices.every((idx, i) => idx === stickyIndices[i])
+//   ) {
+//     return // 无需更新
+//   }
 
-  // 清空并重新渲染吸顶文件夹
-  stickyContainer.innerHTML = ""
-  stickyContainer.style.display = "block"
+//   // 清空并重新渲染吸顶文件夹
+//   stickyContainer.innerHTML = ""
+//   stickyContainer.style.display = "block"
 
-  const fragment = document.createDocumentFragment()
-  for (const idx of stickyIndices) {
-    const flatNode = flatNodes[idx]
-    const li = createFlatNode(flatNode, currentSlug, opts)
-    li.classList.add("sticky-header")
-    fragment.appendChild(li)
-  }
-  stickyContainer.appendChild(fragment)
-}
+//   const fragment = document.createDocumentFragment()
+//   for (const idx of stickyIndices) {
+//     const flatNode = flatNodes[idx]
+//     const li = createFlatNode(flatNode, currentSlug, opts)
+//     li.classList.add("sticky-header")
+//     fragment.appendChild(li)
+//   }
+//   stickyContainer.appendChild(fragment)
+// }
 
 /**
  * 重新渲染扁平化列表
@@ -1000,6 +1003,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
           previousState === undefined ? opts.folderDefaultState === "collapsed" : previousState,
       }
     })
+    sessionStorage.setItem("explorer3CurrentExplorerState", JSON.stringify(currentExplorerState))
 
     const explorerUl = explorer.querySelector(".explorer3-ul")
     if (!explorerUl) continue
@@ -1048,25 +1052,28 @@ async function setupExplorer3(currentSlug: FullSlug) {
       }
     }
 
+    sessionStorage.setItem("explorer3ExpandedFolders", JSON.stringify(Array.from(expandedFolders)))
+
     // 保存合并后的状态
     saveExpandedState()
 
     // 生成扁平化数据
-    flatNodes = flattenTreeRoot(trie)
+    flatNodes = flattenTreeRoot(currentTrie)
+    sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
 
     // 计算文件夹范围（仅在启用吸顶效果时）
-    if (opts.stickyHeaders) {
-      folderRanges = calculateFolderRanges(flatNodes)
-    }
+    // if (opts.stickyHeaders) {
+    //   folderRanges = calculateFolderRanges(flatNodes)
+    // }
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
     const oldTopSpacer = explorerUl.querySelector(".virtual-spacer-top")
     const oldBottomSpacer = explorerUl.querySelector(".virtual-spacer-bottom")
-    const oldStickyHeaders = explorerUl.querySelector(".sticky-headers")
+    // const oldStickyHeaders = explorerUl.querySelector(".sticky-headers")
     if (oldTopSpacer) oldTopSpacer.remove()
     if (oldBottomSpacer) oldBottomSpacer.remove()
-    if (oldStickyHeaders) oldStickyHeaders.remove()
+    // if (oldStickyHeaders) oldStickyHeaders.remove()
 
     // 获取保存的滚动位置（用于计算初始渲染范围）
     const savedScrollTop = sessionStorage.getItem("explorer3ScrollTop")
