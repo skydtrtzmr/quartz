@@ -1,5 +1,5 @@
 import { FileTrieNode } from "../../util/fileTrie"
-import { FullSlug, resolveRelative } from "../../util/path"
+import { FullSlug } from "../../util/path"
 import { ContentDetails } from "../../plugins/emitters/contentIndex"
 
 // TODO
@@ -331,7 +331,13 @@ function loadExpandedState(): Set<string> {
  * 格式：FolderState[]，与 folderExpandState 兼容
  */
 function saveExpandedState() {
-  if (!currentExplorerState) return
+  if (!currentExplorerState || currentExplorerState.length === 0) {
+    console.warn(
+      `%c[saveExpandedState] currentExplorerState 未初始化或为空，跳过保存`,
+      "color: #ff6600; font-weight: bold",
+    )
+    return
+  }
 
   const folderStates = currentExplorerState.map((item) => ({
     path: item.path,
@@ -340,7 +346,7 @@ function saveExpandedState() {
 
   localStorage.setItem("folderExpandState", JSON.stringify(folderStates))
   console.log(
-    `%c[saveExpandedState] 保存到 folderExpandState: ${folderStates.length} 个文件夹状态`,
+    `%c[saveExpandedState] 保存到 localStorage: ${folderStates.length} 个文件夹状态`,
     "color: #00ff00",
   )
 }
@@ -882,6 +888,56 @@ async function rebuildTrieData(opts: ParsedOptions) {
 }
 
 /**
+ * 确保 trie 数据层已初始化
+ * 在缓存恢复或 SPA 跳转后调用，确保 currentTrie 和 currentExplorerState 可用
+ * @param opts - 配置选项
+ */
+async function ensureTrieInitialized(opts: ParsedOptions): Promise<void> {
+  if (currentTrie && currentExplorerState) {
+    console.log(
+      `%c[ensureTrieInitialized] 已初始化，跳过`,
+      "color: #888",
+    )
+    return // 已初始化，无需重复
+  }
+
+  console.log(
+    `%c[ensureTrieInitialized] 开始初始化数据层... currentTrie=${!!currentTrie}, currentExplorerState=${!!currentExplorerState}`,
+    "color: #ffaa00; font-weight: bold",
+  )
+
+  const storageTree = localStorage.getItem("folderExpandState")
+  const serializedExplorerState =
+    storageTree && opts.useSavedState ? JSON.parse(storageTree) : []
+  const oldIndex = new Map<string, boolean>(
+    serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
+  )
+
+  await rebuildTrieData(opts)
+
+  if (currentTrie) {
+    const folderPaths = currentTrie.getFolderPaths()
+    currentExplorerState = folderPaths.map((path) => {
+      const previousState = oldIndex.get(path)
+      return {
+        path,
+        collapsed:
+          previousState === undefined
+            ? opts.folderDefaultState === "collapsed"
+            : previousState,
+      }
+    })
+
+    console.log(
+      `%c[ensureTrieInitialized] 初始化完成: ${folderPaths.length} 个文件夹`,
+      "color: #00ff00",
+    )
+  } else {
+    console.warn("[ensureTrieInitialized] currentTrie 仍为 null，初始化失败")
+  }
+}
+
+/**
  * 从缓存恢复 Explorer UI
  */
 function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
@@ -957,6 +1013,10 @@ async function setupExplorer3(currentSlug: FullSlug) {
     if (hasRealContentInDom) {
       // ========== SPA 跳转：DOM 非空，直接用，只更新 active ==========
       console.log("[setupExplorer3] SPA 跳转，DOM 非空，只更新 active")
+      
+      // 防御性检查：确保数据层存在（理论上 SPA 跳转时应该已初始化）
+      await ensureTrieInitialized(opts)
+      
       const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
       if (currentLink) {
         highlightPath(currentLink)
@@ -968,6 +1028,9 @@ async function setupExplorer3(currentSlug: FullSlug) {
       // ========== 从缓存恢复 ==========
       console.log("[setupExplorer3] 从缓存恢复")
       restoreFromCache(explorerUl, currentSlug)
+
+      // 确保数据层已初始化（关键修复：支持后续交互如 toggleFolder）
+      await ensureTrieInitialized(opts)
 
       // 检查当前页面是否在渲染范围内
       const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
