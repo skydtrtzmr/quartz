@@ -1058,6 +1058,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     const manifest = await fetchManifest
     const serverBuildTime = manifest.lastBuildTime
+    let isCacheExpired = false;
     let hasRealContentInCache = false; // Declare with let here
     if (serverBuildTime) {
       console.log("存在构建时间戳");
@@ -1074,7 +1075,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
         sessionStorage.removeItem("explorer3RenderEnd")
         sessionStorage.removeItem("explorer3CachedSlug")
         sessionStorage.removeItem("explorer3Data") // 清除数据缓存
-        hasRealContentInCache = false // 标记缓存无效
+        isCacheExpired = true;
       }
 
       // 更新时间戳，以服务器build时间为准
@@ -1085,13 +1086,12 @@ async function setupExplorer3(currentSlug: FullSlug) {
     }
 
     // 场景判断：
-    // 1. 当前 DOM 有真实节点 → SPA 跳转，直接用 DOM，只更新 active
-    // 2. 当前 DOM 无节点但缓存有真实内容 且 slug 匹配 → 从缓存恢复
-    // 3. 缓存也没有真实内容或 slug 不匹配 → 首次加载/导航到新页面，完整渲染
+    // 1. 当前 DOM 无节点但缓存有真实内容 且 slug 匹配 → 从缓存恢复
+    // 2. 缓存也没有真实内容或 slug 不匹配 → 首次加载/导航到新页面，完整渲染
     const cachedHtml = sessionStorage.getItem("explorer3Html")
 
     // Re-evaluate hasRealContentInCache after potential clearing
-    if (hasRealContentInCache !== false) { // Only re-evaluate if not explictly set to false (invalidated)
+    if (!isCacheExpired) { // Only re-evaluate if not explictly set to false (invalidated)
       hasRealContentInCache = !!(cachedHtml && cachedHtml.includes("data-flat-index"))
     }
 
