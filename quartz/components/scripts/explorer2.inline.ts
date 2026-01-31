@@ -982,6 +982,8 @@ async function ensureTrieInitialized(opts: ParsedOptions): Promise<void> {
     })
 
     // 同时初始化 expandedFolders，确保与 currentExplorerState 一致
+    console.log("ensureTrieIni, loadExpanded");
+
     const savedExpandedFolders = loadExpandedState()
     const stateExpandedFolders = new Set(
       currentExplorerState.filter((item) => !item.collapsed).map((item) => item.path),
@@ -1170,6 +1172,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
       })
 
       // 初始化展开状态
+      console.log("[setupExplorer3], loadExpanded");
       const savedExpandedFolders = loadExpandedState()
       const stateExpandedFolders = new Set(
         currentExplorerState.filter((item) => !item.collapsed).map((item) => item.path),
