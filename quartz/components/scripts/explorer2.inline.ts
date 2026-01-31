@@ -397,28 +397,29 @@ function flattenTreeRoot(trie: FileTrieNode): FlatNode[] {
 }
 
 /**
+ * TODO 用于计算吸顶效果
  * 获取目标节点的所有父级目录索引
  * @param nodes - 扁平化节点数组
  * @param targetNode - 目标节点
  * @returns 父级节点的索引数组（从子到父排序）
  */
-function getAllParents(nodes: FlatNode[], targetNode: FlatNode | undefined): number[] {
-  if (!targetNode) return []
+// function getAllParents(nodes: FlatNode[], targetNode: FlatNode | undefined): number[] {
+//   if (!targetNode) return []
 
-  const parents: number[] = []
-  const targetLevel = targetNode.level
+//   const parents: number[] = []
+//   const targetLevel = targetNode.level
 
-  // 从目标节点向前查找所有父级
-  for (let i = targetNode.index - 1; i >= 0; i--) {
-    const node = nodes[i]
-    if (node.node.isFolder && node.level < targetLevel) {
-      parents.push(i)
-      if (node.level === 0) break // 到达根级停止
-    }
-  }
+//   // 从目标节点向前查找所有父级
+//   for (let i = targetNode.index - 1; i >= 0; i--) {
+//     const node = nodes[i]
+//     if (node.node.isFolder && node.level < targetLevel) {
+//       parents.push(i)
+//       if (node.level === 0) break // 到达根级停止
+//     }
+//   }
 
-  return parents
-}
+//   return parents
+// }
 
 /**
  * 获取视窗内的节点索引
@@ -426,16 +427,16 @@ function getAllParents(nodes: FlatNode[], targetNode: FlatNode | undefined): num
  * @param viewport - 视窗范围 { start, end }
  * @returns 视窗内节点的索引数组
  */
-function getNodesInViewport(
-  nodes: FlatNode[],
-  viewport: { start: number; end: number },
-): number[] {
-  const result: number[] = []
-  for (let i = viewport.start; i < Math.min(viewport.end, nodes.length); i++) {
-    result.push(i)
-  }
-  return result
-}
+// function getNodesInViewport(
+//   nodes: FlatNode[],
+//   viewport: { start: number; end: number },
+// ): number[] {
+//   const result: number[] = []
+//   for (let i = viewport.start; i < Math.min(viewport.end, nodes.length); i++) {
+//     result.push(i)
+//   }
+//   return result
+// }
 
 /**
  * 计算最终渲染范围：视窗内节点 + 活跃文件的父级目录
@@ -444,24 +445,24 @@ function getNodesInViewport(
  * @param viewport - 视窗范围
  * @returns 应该渲染的节点索引数组（已排序）
  */
-function calculateRenderRange(
-  nodes: FlatNode[],
-  activeSlug: string,
-  viewport: { start: number; end: number },
-): number[] {
-  // 1. 找到活跃文件及其所有父级目录
-  const activeNode = nodes.find((n) => n.node.slug === activeSlug && !n.node.isFolder)
-  const requiredParents = getAllParents(nodes, activeNode)
+// function calculateRenderRange(
+//   nodes: FlatNode[],
+//   activeSlug: string,
+//   viewport: { start: number; end: number },
+// ): number[] {
+//   // 1. 找到活跃文件及其所有父级目录
+//   const activeNode = nodes.find((n) => n.node.slug === activeSlug && !n.node.isFolder)
+//   const requiredParents = getAllParents(nodes, activeNode)
 
-  // 2. 找到视窗内的节点
-  const visibleNodes = getNodesInViewport(nodes, viewport)
+//   // 2. 找到视窗内的节点
+//   const visibleNodes = getNodesInViewport(nodes, viewport)
 
-  // 3. 合并渲染范围：视窗内节点 + 活跃文件的父级目录
-  const renderSet = new Set([...visibleNodes, ...requiredParents])
+//   // 3. 合并渲染范围：视窗内节点 + 活跃文件的父级目录
+//   const renderSet = new Set([...visibleNodes, ...requiredParents])
 
-  // 返回排序后的索引数组
-  return Array.from(renderSet).sort((a, b) => a - b)
-}
+//   // 返回排序后的索引数组
+//   return Array.from(renderSet).sort((a, b) => a - b)
+// }
 
 // ========== 步骤 5：吸顶效果相关函数 ==========
 
@@ -1057,82 +1058,6 @@ async function setupExplorer3(currentSlug: FullSlug) {
     if (opts.stickyHeaders) {
       folderRanges = calculateFolderRanges(flatNodes)
     }
-
-    // 测试日志
-    console.group("%c[步骤 1-2 测试] 扁平化数据层 + 状态管理", "color: #00ffff; font-weight: bold; font-size: 14px")
-
-    // 调试：检查 trie 根节点
-    console.log(`%c[调试] trie.children 数量: ${trie.children.length}`, "color: #ff0000; font-weight: bold")
-    console.log(`[调试] trie 根级节点:`)
-    trie.children.slice(0, 20).forEach((child, i) => {
-      const type = child.isFolder ? "📁" : "📄"
-      const childCount = child.isFolder ? ` (${child.children.length} 子节点)` : ""
-      console.log(`   ${i}. ${type} ${child.displayName} (${child.slug})${childCount}`)
-    })
-    if (trie.children.length > 20) {
-      console.log(`   ... 还有 ${trie.children.length - 20} 个节点`)
-    }
-    console.log(`0. 状态来源: savedExpandedFolders=${savedExpandedFolders.size}, stateExpandedFolders=${stateExpandedFolders.size}`)
-    console.log(`1. expandedFolders 数量: ${expandedFolders.size}`)
-    console.log(`2. expandedFolders 内容 (前10个):`, Array.from(expandedFolders).slice(0, 10))
-    console.log(`3. flatNodes 总数: ${flatNodes.length}`)
-
-    const folderCount = flatNodes.filter((n) => n.node.isFolder).length
-    const fileCount = flatNodes.filter((n) => !n.node.isFolder).length
-    console.log(`   - 文件夹: ${folderCount}`)
-    console.log(`   - 文件: ${fileCount}`)
-
-    // 显示前 10 个节点
-    console.log("4. 前 10 个扁平节点:")
-    flatNodes.slice(0, 10).forEach((fn, i) => {
-      const type = fn.node.isFolder ? "📁" : "📄"
-      const indent = "  ".repeat(fn.level)
-      console.log(`   ${i}. ${type} L${fn.level} ${indent}${fn.node.displayName} (${fn.node.slug})`)
-    })
-
-    // 测试 getAllParents
-    const testFileNode = flatNodes.find((n) => !n.node.isFolder)
-    if (testFileNode) {
-      const parents = getAllParents(flatNodes, testFileNode)
-      console.log(`5. 测试 getAllParents - 文件: ${testFileNode.node.displayName}`)
-      console.log(`   父级索引: [${parents.join(", ")}]`)
-      parents.forEach((idx) => {
-        const p = flatNodes[idx]
-        console.log(`   - ${p.node.displayName} (level ${p.level})`)
-      })
-    }
-
-    // 测试 calculateRenderRange
-    const testViewport = { start: 0, end: 20 }
-    const renderIndices = calculateRenderRange(flatNodes, currentSlug, testViewport)
-    console.log(`6. 测试 calculateRenderRange - viewport [0, 20], activeSlug: ${currentSlug}`)
-    console.log(`   渲染索引数量: ${renderIndices.length}`)
-    console.log(`   渲染索引: [${renderIndices.slice(0, 20).join(", ")}${renderIndices.length > 20 ? "..." : ""}]`)
-
-    // 初始化渲染范围（步骤 4 使用）
-    flatRenderStart = 0
-    flatRenderEnd = Math.min(50, flatNodes.length)
-    console.log(`7. 初始化渲染范围: [${flatRenderStart}, ${flatRenderEnd})`)
-
-    // ========== 步骤 3 测试：渲染层改造 ==========
-    console.log("%c--- 步骤 3 测试：渲染层改造 ---", "color: #ff6600; font-weight: bold")
-
-    // 测试 createFlatNode - 创建前 5 个扁平节点
-    const testFlatNodes = flatNodes.slice(0, Math.min(5, flatNodes.length))
-    console.log(`8. 测试 createFlatNode - 创建 ${testFlatNodes.length} 个节点:`)
-    testFlatNodes.forEach((flatNode) => {
-      const li = createFlatNode(flatNode, currentSlug, opts)
-      const type = flatNode.node.isFolder ? "📁" : "📄"
-      const indentEl = flatNode.node.isFolder
-        ? li.querySelector(".folder3-container")
-        : li.querySelector("a")
-      const paddingLeft = (indentEl as HTMLElement)?.style.paddingLeft || "default"
-      console.log(
-        `   [${type}] L${flatNode.level} ${flatNode.node.displayName} - flatIndex=${li.dataset.flatIndex}, paddingLeft=${paddingLeft}`,
-      )
-    })
-
-    console.groupEnd()
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
