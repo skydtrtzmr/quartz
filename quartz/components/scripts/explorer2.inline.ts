@@ -928,8 +928,15 @@ async function ensureTrieInitialized(opts: ParsedOptions): Promise<void> {
       }
     })
 
+    // 同时初始化 expandedFolders，确保与 currentExplorerState 一致
+    const savedExpandedFolders = loadExpandedState()
+    const stateExpandedFolders = new Set(
+      currentExplorerState.filter((item) => !item.collapsed).map((item) => item.path),
+    )
+    expandedFolders = new Set([...savedExpandedFolders, ...stateExpandedFolders])
+
     console.log(
-      `%c[ensureTrieInitialized] 初始化完成: ${folderPaths.length} 个文件夹`,
+      `%c[ensureTrieInitialized] 初始化完成: ${folderPaths.length} 个文件夹, ${expandedFolders.size} 个已展开`,
       "color: #00ff00",
     )
   } else {
@@ -945,13 +952,9 @@ function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
   explorerUl.scrollTop = parseInt(sessionStorage.getItem("explorer3ScrollTop") || "0")
   flatRenderStart = parseInt(sessionStorage.getItem("explorer3RenderStart") || "0")
   flatRenderEnd = parseInt(sessionStorage.getItem("explorer3RenderEnd") || "0")
-  try {
-    expandedFolders = new Set(
-      JSON.parse(sessionStorage.getItem("explorer3ExpandedFolders") || "[]"),
-    )
-  } catch {
-    expandedFolders = new Set()
-  }
+  
+  // 注意：不再从 sessionStorage 恢复 expandedFolders
+  // expandedFolders 将在 ensureTrieInitialized 中从 localStorage 重建，确保与 currentExplorerState 一致
 
   // 更新 active 状态
   const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
@@ -959,7 +962,7 @@ function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
     highlightPath(currentLink)
   }
 
-  console.log("[restoreFromCache] 恢复完成")
+  console.log("[restoreFromCache] 恢复完成（expandedFolders 将由 ensureTrieInitialized 设置）")
 }
 
 /**
@@ -1030,7 +1033,26 @@ async function setupExplorer3(currentSlug: FullSlug) {
       restoreFromCache(explorerUl, currentSlug)
 
       // 确保数据层已初始化（关键修复：支持后续交互如 toggleFolder）
+      // 这里会从 localStorage 重新构建 expandedFolders
       await ensureTrieInitialized(opts)
+
+      // 同步 DOM 箭头状态：因为 HTML 是从缓存恢复的，箭头方向可能与新的 expandedFolders 不一致
+      // 需要更新所有文件夹的箭头方向
+      const allFolders = explorerUl.querySelectorAll("li.folder")
+      allFolders.forEach((li) => {
+        const folderPath = li.getAttribute("data-folderpath")
+        if (folderPath) {
+          const button = li.firstElementChild as HTMLElement
+          if (button && button.classList.contains("folder-button")) {
+            const isExpanded = expandedFolders.has(folderPath)
+            button.classList.toggle("collapsed", !isExpanded)
+            console.log(
+              `%c[syncArrows] ${folderPath}: ${isExpanded ? "展开" : "折叠"}`,
+              "color: #888; font-size: 10px",
+            )
+          }
+        }
+      })
 
       // 检查当前页面是否在渲染范围内
       const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
@@ -1157,11 +1179,11 @@ document.addEventListener("prenav", async () => {
   if (!explorerUl) return
 
   // 保存各个数据到独立的 sessionStorage 键
+  // 注意：不再缓存 expandedFolders，改为从 localStorage 重建以保证状态一致性
   sessionStorage.setItem("explorer3Html", explorerUl.innerHTML)
   sessionStorage.setItem("explorer3ScrollTop", explorerUl.scrollTop.toString())
   sessionStorage.setItem("explorer3RenderStart", flatRenderStart.toString())
   sessionStorage.setItem("explorer3RenderEnd", flatRenderEnd.toString())
-  sessionStorage.setItem("explorer3ExpandedFolders", JSON.stringify(Array.from(expandedFolders)))
 })
 
 document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
