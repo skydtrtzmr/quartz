@@ -1089,31 +1089,17 @@ async function setupExplorer3(currentSlug: FullSlug) {
     // 2. 当前 DOM 无节点但缓存有真实内容 且 slug 匹配 → 从缓存恢复
     // 3. 缓存也没有真实内容或 slug 不匹配 → 首次加载/导航到新页面，完整渲染
     const cachedHtml = sessionStorage.getItem("explorer3Html")
-    const hasRealContentInDom = explorerUl.querySelectorAll("li[data-flat-index]").length > 0
+
     // Re-evaluate hasRealContentInCache after potential clearing
     if (hasRealContentInCache !== false) { // Only re-evaluate if not explictly set to false (invalidated)
       hasRealContentInCache = !!(cachedHtml && cachedHtml.includes("data-flat-index"))
     }
 
     console.log(
-      `[setupExplorer3] hasRealContentInDom=${hasRealContentInDom}, hasRealContentInCache=${hasRealContentInCache}`,
+      `[setupExplorer3]  hasRealContentInCache=${hasRealContentInCache}`,
     )
 
-    if (hasRealContentInDom) {
-      // ========== SPA 跳转：DOM 非空，直接用，只更新 active ==========
-      console.log("[setupExplorer3] SPA 跳转，DOM 非空，只更新 active")
-
-      // 防御性检查：确保数据层存在（理论上 SPA 跳转时应该已初始化）
-      await ensureTrieInitialized(opts)
-
-      const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
-      if (currentLink) {
-        highlightPath(currentLink)
-      } else {
-        clearHighlight()
-        console.log("[setupExplorer3] 当前页面不在渲染范围内，已清除 active")
-      }
-    } else if (hasRealContentInCache) {
+    if (hasRealContentInCache) {
       // ========== 从缓存恢复 ==========
       console.log("[setupExplorer3] 从缓存恢复")
       restoreFromCache(explorerUl, currentSlug)
