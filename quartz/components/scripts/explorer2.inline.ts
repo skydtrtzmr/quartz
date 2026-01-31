@@ -139,7 +139,9 @@ function createFileNode(
   const clone = template.content.cloneNode(true) as DocumentFragment
   const li = clone.querySelector("li") as HTMLLIElement
   const a = li.querySelector("a") as HTMLAnchorElement
-  a.href = resolveRelative(currentSlug, node.slug)
+  // a.href = resolveRelative(currentSlug, node.slug)
+  // [M] 改为从根目录开始计算路径
+  a.href = `/${node.slug}`
   a.dataset.for = node.slug
   a.textContent = node.displayName
 
@@ -191,7 +193,9 @@ function createSimpleFolderNode(
   if (opts.folderClickBehavior === "link") {
     const button = titleContainer.querySelector(".folder3-button") as HTMLElement
     const a = document.createElement("a")
-    a.href = resolveRelative(currentSlug, folderPath)
+    // a.href = resolveRelative(currentSlug, folderPath)
+    // [M] 改为从根目录开始计算路径
+    a.href = `/${folderPath}`
     a.dataset.for = folderPath
     a.textContent = node.displayName
 
@@ -282,17 +286,17 @@ function locateCurrentFile() {
   }
 
   console.log(`%c[定位] 开始定位到: ${currentActiveSlug}`, "color: #00aaff; font-weight: bold")
-  
+
   // 设置导航锁定
   isNavigating = true
   navigateToFile(currentActiveSlug)
-  
+
   // 使用 requestIdleCallback 在浏览器空闲时解锁
   const unlockNavigating = () => {
     isNavigating = false
     console.log(`%c[定位] 浏览器空闲，导航锁定已解除`, "color: #00cc88")
   }
-  
+
   if (typeof requestIdleCallback !== "undefined") {
     requestIdleCallback(unlockNavigating, { timeout: 2000 })
   } else {
@@ -956,6 +960,17 @@ async function setupExplorer3(currentSlug: FullSlug) {
     const oldIndex = new Map<string, boolean>(
       serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
     )
+
+    const metadata = await fetchMetadata
+    const serverBuildTime = metadata.lastBuildTime
+    const cachedBuildTime = sessionStorage.getItem("explorer3LastBuildTime")
+    if (cachedBuildTime && serverBuildTime !== cachedBuildTime) {
+      console.log('[setupExplorer3] 构建时间不一致，需要清除缓存。');
+      sessionStorage.setItem("explorer3LastBuildTime", serverBuildTime)
+      // TODO 补充缓存清除代码
+    } else {
+      console.log('[setupExplorer3] 构建时间一致，不需要清除缓存。');
+    }
 
     const data = await fetchData
     const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
