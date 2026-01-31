@@ -30,6 +30,10 @@ export function pageResources(
   const contentIndexPath = joinSegments(baseDir, "static/contentIndex.json")
   const contentIndexScript = `const fetchData = fetch("${contentIndexPath}").then(data => data.json())`
 
+  const manifestPath = joinSegments(baseDir, "static/manifest.json")
+  // 添加 cache: "no-cache" 确保每次都验证最新版本
+  const manifestScript = `const fetchManifest = fetch("${manifestPath}", { cache: "no-cache" }).then(data => data.json())`
+
   const resources: StaticResources = {
     css: [
       {
@@ -48,6 +52,12 @@ export function pageResources(
         contentType: "inline",
         spaPreserve: true,
         script: contentIndexScript,
+      },
+      {
+        loadTime: "beforeDOMReady",
+        contentType: "inline",
+        spaPreserve: true,
+        script: manifestScript,
       },
       ...staticResources.js,
     ],

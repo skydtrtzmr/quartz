@@ -801,7 +801,7 @@ function highlightPath(targetElement: Element) {
 }
 
 /**
- * 定位到指定文件（扁平化版本）
+ * 定位到指定文件（扁平化）
  * @param targetSlug - 目标文件的 slug
  * @returns 是否成功定位
  */
@@ -856,7 +856,60 @@ function navigateToFile(targetSlug: FullSlug): boolean {
  */
 async function rebuildTrieData(opts: ParsedOptions) {
   try {
-    const data = await fetchData
+    let data: any = null
+    let shouldFetchData = true
+
+    // 1. 获取最新的构建 Manifest (依赖 renderPage 注入的 fetchManifest 全局变量)
+    // try {
+    //   const manifest = await fetchManifest
+    //   const serverBuildTime = manifest.lastBuildTime
+    //   const cachedBuildTime = sessionStorage.getItem("explorer3LastBuildTime")
+
+    //   if (cachedBuildTime && serverBuildTime && parseInt(cachedBuildTime) === serverBuildTime) {
+    //     // 版本一致，尝试加载数据缓存
+    //     const cachedDataStr = sessionStorage.getItem("explorer3Data")
+    //     if (cachedDataStr) {
+    //       try {
+    //         data = JSON.parse(cachedDataStr)
+    //         shouldFetchData = false
+    //         console.log("[rebuildTrieData] 版本一致，使用缓存数据")
+    //       } catch (e) {
+    //         console.warn("[rebuildTrieData] 数据缓存损坏")
+    //       }
+    //     }
+    //   } else {
+    //     console.log(`%c[rebuildTrieData] 版本变更: ${cachedBuildTime} -> ${serverBuildTime}`, "color: #ff6600")
+    //     // 版本不一致，清理旧缓存
+    //     sessionStorage.removeItem("explorer3Html")
+    //     sessionStorage.removeItem("explorer3ScrollTop")
+    //     // ... 清除其他 keys
+    //     sessionStorage.removeItem("explorer3Data") // 清除旧数据
+
+    //     // 更新时间戳
+    //     sessionStorage.setItem("explorer3LastBuildTime", serverBuildTime.toString())
+    //   }
+    // } catch (e) {
+    //   console.warn("[rebuildTrieData] 获取 manifest 失败:", e)
+    // }
+
+    // 2. 如果需要，获取新数据并缓存
+    if (shouldFetchData || !data) {
+      console.log("[rebuildTrieData] 获取新数据 contentIndex")
+      data = await fetchData
+      try {
+        // 创建瘦身版数据用于缓存
+        const dataToCache = Object.fromEntries(
+          Object.entries(data).map(([key, val]: [string, any]) => {
+            const { content, richContent, ...rest } = val
+            return [key, rest]
+          })
+        )
+        sessionStorage.setItem("explorer3Data", JSON.stringify(dataToCache))
+      } catch (e) {
+        console.warn("[rebuildTrieData] 缓存数据失败:", e)
+      }
+    }
+
     const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
     const trie = FileTrieNode.fromEntries(entries)
 
@@ -952,7 +1005,7 @@ function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
   explorerUl.scrollTop = parseInt(sessionStorage.getItem("explorer3ScrollTop") || "0")
   flatRenderStart = parseInt(sessionStorage.getItem("explorer3RenderStart") || "0")
   flatRenderEnd = parseInt(sessionStorage.getItem("explorer3RenderEnd") || "0")
-  
+
   // 注意：不再从 sessionStorage 恢复 expandedFolders
   // expandedFolders 将在 ensureTrieInitialized 中从 localStorage 重建，确保与 currentExplorerState 一致
 
@@ -1001,13 +1054,44 @@ async function setupExplorer3(currentSlug: FullSlug) {
     currentActiveSlug = currentSlug
     currentExplorerUl = explorerUl
 
+    const manifest = await fetchManifest
+    const serverBuildTime = manifest.lastBuildTime
+    let hasRealContentInCache = false; // Declare with let here
+    if (serverBuildTime) {
+      console.log("存在构建时间戳");
+
+      const cachedBuildTime = sessionStorage.getItem("explorer3LastBuildTime")
+      if (cachedBuildTime !== serverBuildTime.toString()) {
+        console.log(
+          `%c[setupExplorer3] 版本更新: ${cachedBuildTime} -> ${serverBuildTime}，清除缓存`,
+          "color: #ff6600; font-weight: bold",
+        )
+        sessionStorage.removeItem("explorer3Html")
+        sessionStorage.removeItem("explorer3ScrollTop")
+        sessionStorage.removeItem("explorer3RenderStart")
+        sessionStorage.removeItem("explorer3RenderEnd")
+        sessionStorage.removeItem("explorer3CachedSlug")
+        sessionStorage.removeItem("explorer3Data") // 清除数据缓存
+        hasRealContentInCache = false // 标记缓存无效
+      }
+
+      // 更新时间戳，以服务器build时间为准
+      sessionStorage.setItem("explorer3LastBuildTime", serverBuildTime.toString())
+    } else {
+      console.log("不存在构建时间戳");
+
+    }
+
     // 场景判断：
     // 1. 当前 DOM 有真实节点 → SPA 跳转，直接用 DOM，只更新 active
-    // 2. 当前 DOM 无节点但缓存有真实内容 → 从缓存恢复
-    // 3. 缓存也没有真实内容 → 首次加载，完整渲染
+    // 2. 当前 DOM 无节点但缓存有真实内容 且 slug 匹配 → 从缓存恢复
+    // 3. 缓存也没有真实内容或 slug 不匹配 → 首次加载/导航到新页面，完整渲染
     const cachedHtml = sessionStorage.getItem("explorer3Html")
     const hasRealContentInDom = explorerUl.querySelectorAll("li[data-flat-index]").length > 0
-    const hasRealContentInCache = cachedHtml && cachedHtml.includes("data-flat-index")
+    // Re-evaluate hasRealContentInCache after potential clearing
+    if (hasRealContentInCache !== false) { // Only re-evaluate if not explictly set to false (invalidated)
+      hasRealContentInCache = !!(cachedHtml && cachedHtml.includes("data-flat-index"))
+    }
 
     console.log(
       `[setupExplorer3] hasRealContentInDom=${hasRealContentInDom}, hasRealContentInCache=${hasRealContentInCache}`,
@@ -1016,10 +1100,10 @@ async function setupExplorer3(currentSlug: FullSlug) {
     if (hasRealContentInDom) {
       // ========== SPA 跳转：DOM 非空，直接用，只更新 active ==========
       console.log("[setupExplorer3] SPA 跳转，DOM 非空，只更新 active")
-      
+
       // 防御性检查：确保数据层存在（理论上 SPA 跳转时应该已初始化）
       await ensureTrieInitialized(opts)
-      
+
       const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
       if (currentLink) {
         highlightPath(currentLink)

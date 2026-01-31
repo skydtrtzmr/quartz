@@ -85,8 +85,8 @@ function generateRSSFeed(cfg: GlobalConfiguration, idx: ContentIndexMap, limit?:
       <title>${escapeHTML(cfg.pageTitle)}</title>
       <link>https://${base}</link>
       <description>${!!limit ? i18n(cfg.locale).pages.rss.lastFewNotes({ count: limit }) : i18n(cfg.locale).pages.rss.recentNotes} on ${escapeHTML(
-        cfg.pageTitle,
-      )}</description>
+    cfg.pageTitle,
+  )}</description>
       <generator>Quartz -- quartz.jzhao.xyz</generator>
       ${items}
     </channel>
@@ -152,6 +152,18 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
         }),
       )
 
+      // 生成 manifest.json 用于前端版本验证
+      // 这里的 Date.now() 是构建时间，符合用户要求
+      const manifestFp = joinSegments("static", "manifest") as FullSlug
+      yield write({
+        ctx,
+        content: JSON.stringify({
+          lastBuildTime: Date.now(),
+        }),
+        slug: manifestFp,
+        ext: ".json",
+      })
+
       yield write({
         ctx,
         content: JSON.stringify(simplifiedIndex),
@@ -159,15 +171,15 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
         ext: ".json",
       })
     },
-    
+
     // 增量更新 contentIndex.json
     async *partialEmit(ctx, content, resources, changeEvents) {
       console.log("ContentIndex: partialEmit");
-      
+
       const cfg = ctx.cfg.configuration
       const fp = joinSegments("static", "contentIndex") as FullSlug
       const contentIndexPath = joinSegments(ctx.argv.output, "static", "contentIndex.json")
-      
+
       // 读取现有的 contentIndex.json
       let existingIndex: Record<string, ContentDetails> = {}
       try {
@@ -179,17 +191,17 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
         // 如果文件不存在或解析失败，使用空对象
         console.log('ContentIndex: Creating new index file')
       }
-      
+
       // 处理变化事件
       for (const changeEvent of changeEvents) {
         if (changeEvent.type === 'delete') {
           console.log(`ContentIndex: 触发一个删除事件`);
-          
+
           // 删除条目 - 从 path 计算 slug
           let slug = changeEvent.file?.data.slug
           if (!slug) {
             console.log(`no slug found for ${changeEvent.path}`);
-            
+
             // 如果 file 不存在，从 path 计算 slug
             // changeEvent.path 可能是完整路径，需要提取文件名
             const relativePath = changeEvent.path
@@ -197,7 +209,7 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
             slug = slugifyFilePath(fileName as FilePath)
           }
           console.log(`ContentIndex: 删除条目 - ${slug}`);
-          
+
           if (slug && existingIndex[slug]) {
             delete existingIndex[slug]
             console.log(`ContentIndex: Removed ${slug}`)
@@ -208,12 +220,12 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
           if (file) {
             const slug = file.data.slug!
             const date = getDate(ctx.cfg.configuration, file.data) ?? new Date()
-            
+
             if (opts?.includeEmptyFiles || (file.data.text && file.data.text !== "")) {
               // 找到对应的 tree（HTML AST）- 只在 content 中查找真正变化的文件
               const matchingContent = content.find(([_, f]) => f.data.slug === slug)
               const tree = matchingContent?.[0]
-              
+
               existingIndex[slug] = {
                 slug,
                 filePath: file.data.relativePath!,
@@ -228,19 +240,31 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
                 description: file.data.description ?? "",
                 frontmatter: file.data.frontmatter ?? {},
               }
-              
+
               // 移除不需要的字段
               delete existingIndex[slug].description
               delete existingIndex[slug].date
-              
+
               console.log(`ContentIndex: Updated ${slug}`)
             }
           }
         }
       }
-      
+
       console.log(`ContentIndex: Final index has ${Object.keys(existingIndex).length} entries`)
-      
+
+      // 生成 manifest.json 用于前端版本验证
+      // 这里的 Date.now() 是构建时间，符合用户要求
+      const manifestFp = joinSegments("static", "manifest") as FullSlug
+      yield write({
+        ctx,
+        content: JSON.stringify({
+          lastBuildTime: Date.now(),
+        }),
+        slug: manifestFp,
+        ext: ".json",
+      })
+
       // 写入更新后的 contentIndex.json
       yield write({
         ctx,
@@ -248,7 +272,7 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
         slug: fp,
         ext: ".json",
       })
-      
+
       // 如果启用了 sitemap 和 RSS，需要重新生成（因为它们需要全量数据）
       if (opts?.enableSiteMap || opts?.enableRSS) {
         // 重新构建 linkIndex 用于 sitemap 和 RSS
@@ -259,7 +283,7 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
             date: new Date(), // 使用当前时间作为默认值
           })
         }
-        
+
         if (opts?.enableSiteMap) {
           yield write({
             ctx,
@@ -279,7 +303,7 @@ export const ContentIndex: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
         }
       }
     },
-    
+
     externalResources: (ctx) => {
       if (opts?.enableRSS) {
         return {
