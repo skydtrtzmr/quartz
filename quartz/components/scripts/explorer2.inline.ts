@@ -927,6 +927,21 @@ function navigateToFile(targetSlug: FullSlug): boolean {
 }
 
 /**
+ * 清除资源管理器的所有缓存数据
+ */
+function clearExplorerCache() {
+  const cacheKeys = [
+    "explorer3Html",
+    "explorer3ScrollTop",
+    "explorer3RenderStart",
+    "explorer3RenderEnd",
+    "expandedFolders",
+  ]
+  cacheKeys.forEach((key) => sessionStorage.removeItem(key))
+  console.log("%c[clearExplorerCache] 缓存已清除", "color: #ff4444; font-weight: bold")
+}
+
+/**
  * 从缓存恢复 Explorer UI
  */
 function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
@@ -1025,31 +1040,28 @@ async function setupExplorer3(currentSlug: FullSlug) {
     globalOpts = opts
 
     const metadata = await fetchMetadata
-    const serverBuildTime = metadata.lastBuildTime
+    const serverBuildTime = String(metadata.lastBuildTime)
     const cachedBuildTime = sessionStorage.getItem("explorer3LastBuildTime")
-    console.log('serverBuildTime:', serverBuildTime)
-    console.log('cachedBuildTime:', cachedBuildTime)
 
-    if (cachedBuildTime && serverBuildTime == cachedBuildTime) {
-      console.log('[setupExplorer3] 构建时间一致，不需要清除缓存。');
-      // TODO 补充缓存清除代码
-    } else {
-      console.log('[setupExplorer3] 构建时间不一致，需要清除缓存。');
-
+    if (cachedBuildTime !== serverBuildTime) {
+      console.log(
+        `%c[setupExplorer3] 构建时间不一致 (旧: ${cachedBuildTime}, 新: ${serverBuildTime})，正在清除缓存...`,
+        "color: #ff8800; font-weight: bold",
+      )
+      clearExplorerCache()
       sessionStorage.setItem("explorer3LastBuildTime", serverBuildTime)
     }
 
     // 优先渲染
     const explorerUl = explorer.querySelector(".explorer3-ul")
     if (!explorerUl) {
-      console.log('[setupExplorer3] 不存在explorer3-ul 元素，跳过。');
+      console.log("[setupExplorer3] 不存在 explorer3-ul 元素，跳过。")
       continue
     }
     const cachedHtml = sessionStorage.getItem("explorer3Html")
     const hasRealContentInCache = cachedHtml && cachedHtml.includes("data-flat-index")
-    console.log('hasRealContentInCache:', hasRealContentInCache);
 
-    if (hasRealContentInCache && cachedBuildTime == serverBuildTime) {
+    if (hasRealContentInCache) {
       // ========== 从缓存恢复 ==========
       console.log("[setupExplorer3] 从缓存恢复")
       restoreFromCache(explorerUl, currentSlug)
@@ -1233,8 +1245,8 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
-    if (!hasRealContentInCache || cachedBuildTime != serverBuildTime) {
-      console.log('不存在有效缓存，需要重新渲染。');
+    if (!hasRealContentInCache) {
+      console.log("不存在有效缓存，执行全量渲染。")
 
       const oldTopSpacer = explorerUl.querySelector(".virtual-spacer-top")
       const oldBottomSpacer = explorerUl.querySelector(".virtual-spacer-bottom")
