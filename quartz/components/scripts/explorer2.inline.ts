@@ -1001,6 +1001,8 @@ function bindEvents(explorer: HTMLElement, opts: ParsedOptions) {
 async function setupExplorer3(currentSlug: FullSlug) {
   console.log("[setupExplorer3] Setting up explorer for slug:", currentSlug)
 
+  performance.mark("setupExplorer3-start")
+
   const allExplorers = document.querySelectorAll("div.explorer3") as NodeListOf<HTMLElement>
 
   for (const explorer of allExplorers) {
@@ -1051,12 +1053,119 @@ async function setupExplorer3(currentSlug: FullSlug) {
       // ========== 从缓存恢复 ==========
       console.log("[setupExplorer3] 从缓存恢复")
       restoreFromCache(explorerUl, currentSlug)
+      performance.mark("restoreFromCache-end")
+
+      // 有缓存时：异步初始化，不阻塞
+      const initExplorerAsync = async () => {
+        performance.mark("fetchData-start")
+        const data = await fetchData
+        performance.mark("fetchData-end")
+
+        performance.mark("buildTrie-start")
+        const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
+        const trie = FileTrieNode.fromEntries(entries)
+        performance.mark("buildTrie-end")
+
+        performance.mark("filterMapSort-start")
+        for (const fn of opts.order) {
+          switch (fn) {
+            case "filter":
+              if (opts.filterFn) trie.filter(opts.filterFn)
+              break
+            case "map":
+              if (opts.mapFn) trie.map(opts.mapFn)
+              break
+            case "sort":
+              if (opts.sortFn) trie.sort(opts.sortFn)
+              break
+          }
+        }
+        performance.mark("filterMapSort-end")
+
+        currentTrie = trie
+        currentExplorerUl = explorerUl
+
+        performance.mark("getFolderPaths-start")
+        const validFolders = new Set(trie.getFolderPaths())
+        performance.mark("getFolderPaths-end")
+
+        if (opts.useSavedState) {
+          const loadedState = loadExpandedState()
+          expandedFolders = new Set()
+          loadedState.forEach(path => {
+            if (validFolders.has(path as FullSlug)) {
+              expandedFolders.add(path)
+            }
+          })
+        } else {
+          expandedFolders = new Set()
+          if (opts.folderDefaultState === "open") {
+            validFolders.forEach(path => expandedFolders.add(path))
+          }
+        }
+
+        const currentPathParts = currentSlug.split("/")
+        for (let i = 1; i <= currentPathParts.length; i++) {
+          const ancestorPath = currentPathParts.slice(0, i).join("/") as FullSlug
+          if (validFolders.has(ancestorPath)) {
+            expandedFolders.add(ancestorPath)
+          }
+        }
+
+        performance.mark("flattenTreeRoot-start")
+        flatNodes = flattenTreeRoot(currentTrie)
+        performance.mark("flattenTreeRoot-end")
+
+        if (opts.useSavedState) {
+          saveExpandedState()
+        }
+
+        setupFlatVirtualScroll(explorerUl, currentSlug, opts)
+        isNavigating = false
+        console.log("[setupExplorer3] 异步初始化完成")
+
+        // 异步初始化完成后打印各步骤耗时
+        performance.mark("setupExplorer3-end")
+        performance.measure("setupExplorer3-total", "setupExplorer3-start", "setupExplorer3-end")
+        const total = performance.getEntriesByName("setupExplorer3-total")[0]?.duration?.toFixed(2) ?? "?"
+        console.log(`%c[setupExplorer3] 异步完成，总耗时: ${total}ms`, "color: #00ff00; font-weight: bold")
+
+        const measures = [
+          { name: "fetchData", start: "fetchData-start", end: "fetchData-end" },
+          { name: "buildTrie", start: "buildTrie-start", end: "buildTrie-end" },
+          { name: "filterMapSort", start: "filterMapSort-start", end: "filterMapSort-end" },
+          { name: "getFolderPaths", start: "getFolderPaths-start", end: "getFolderPaths-end" },
+          { name: "flattenTreeRoot", start: "flattenTreeRoot-start", end: "flattenTreeRoot-end" },
+        ]
+
+        for (const m of measures) {
+          performance.measure(m.name, m.start, m.end)
+          const entry = performance.getEntriesByName(m.name)[0]
+          if (entry) {
+            const percent = total !== "?" ? ((entry.duration / Number(total)) * 100).toFixed(1) : "?"
+            console.log(`  - ${m.name}: ${entry.duration.toFixed(2)}ms (${percent}%)`)
+          }
+        }
+      }
+
+      requestIdleCallback(() => {
+        initExplorerAsync()
+      })
+
+      bindEvents(explorer, opts)
+      continue  // 有缓存时直接进入下一次循环，性能结果在异步完成后打印
     }
 
+    performance.mark("fetchData-start")
     const data = await fetchData
+    performance.mark("fetchData-end")
+
+    performance.mark("buildTrie-start")
     const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
     const trie = FileTrieNode.fromEntries(entries)
+    performance.mark("buildTrie-end")
 
+    performance.mark("filterMapSort-start")
     for (const fn of opts.order) {
       switch (fn) {
         case "filter":
@@ -1070,6 +1179,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
           break
       }
     }
+    performance.mark("filterMapSort-end")
 
     // 设置全局引用（用于 refreshFlatExplorer）
     currentTrie = trie
@@ -1078,8 +1188,10 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // ========== 步骤 2：状态管理初始化 ==========
 
+    performance.mark("getFolderPaths-start")
     // 获取所有有效的文件夹路径集合
     const validFolders = new Set(trie.getFolderPaths())
+    performance.mark("getFolderPaths-end")
 
     // 1. 初始化展开状态
     if (opts.useSavedState && serverBuildTime == cachedBuildTime) {
@@ -1115,7 +1227,9 @@ async function setupExplorer3(currentSlug: FullSlug) {
     }
 
     // 生成扁平化数据
+    performance.mark("flattenTreeRoot-start")
     flatNodes = flattenTreeRoot(currentTrie)
+    performance.mark("flattenTreeRoot-end")
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
@@ -1134,7 +1248,9 @@ async function setupExplorer3(currentSlug: FullSlug) {
       const initialScrollTop = savedScrollTop ? parseInt(savedScrollTop) : 0
 
       // 使用扁平化数据渲染（传入滚动位置以计算正确的初始渲染范围）
+      performance.mark("renderFlatExplorer-start")
       renderFlatExplorer(explorerUl, currentSlug, opts, initialScrollTop)
+      performance.mark("renderFlatExplorer-end")
 
 
       // 恢复滚动位置
@@ -1158,6 +1274,37 @@ async function setupExplorer3(currentSlug: FullSlug) {
     }
 
     bindEvents(explorer, opts)
+
+    // 打印性能测量结果（无缓存路径）
+    printPerformance()
+  }
+}
+
+/**
+ * 打印性能测量结果
+ */
+function printPerformance() {
+  performance.mark("setupExplorer3-end")
+  performance.measure("setupExplorer3-total", "setupExplorer3-start", "setupExplorer3-end")
+
+  const measures = [
+    { name: "fetchData", start: "fetchData-start", end: "fetchData-end" },
+    { name: "buildTrie", start: "buildTrie-start", end: "buildTrie-end" },
+    { name: "filterMapSort", start: "filterMapSort-start", end: "filterMapSort-end" },
+    { name: "getFolderPaths", start: "getFolderPaths-start", end: "getFolderPaths-end" },
+    { name: "flattenTreeRoot", start: "flattenTreeRoot-start", end: "flattenTreeRoot-end" },
+    { name: "renderFlatExplorer", start: "renderFlatExplorer-start", end: "renderFlatExplorer-end" },
+  ]
+
+  const total = performance.getEntriesByName("setupExplorer3-total")[0]?.duration?.toFixed(2) ?? "?"
+  console.log(`%c[setupExplorer3] 总耗时: ${total}ms`, "color: #00ff00; font-weight: bold")
+
+  for (const m of measures) {
+    const entry = performance.getEntriesByName(m.name)[0]
+    if (entry) {
+      const percent = total !== "?" ? ((entry.duration / Number(total)) * 100).toFixed(1) : "?"
+      console.log(`  - ${m.name}: ${entry.duration.toFixed(2)}ms (${percent}%)`)
+    }
   }
 }
 
@@ -1178,7 +1325,14 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
   currentActiveSlug = currentSlug // 保存当前活跃文件
   console.log(`%c[NAV事件] 导航到: ${currentSlug}`, "color: #ff00ff; font-weight: bold")
 
+  performance.mark("nav-start")
+
   await setupExplorer3(currentSlug)
+
+  performance.mark("nav-end")
+  performance.measure("nav-total", "nav-start", "nav-end")
+  const navTotal = performance.getEntriesByName("nav-total")[0]?.duration?.toFixed(2) ?? "?"
+  console.log(`%c[NAV事件] 总耗时: ${navTotal}ms`, "color: #ff00ff; font-weight: bold")
 
   for (const explorer of document.getElementsByClassName("explorer3")) {
     const mobileExplorer = explorer.querySelector(".mobile-explorer")
