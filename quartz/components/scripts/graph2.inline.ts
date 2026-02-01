@@ -125,6 +125,8 @@ if (!(window as any).graph2Initialized) {
   }
 
   async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
+    console.log("[renderGraph] start");
+
     const slug = simplifySlug(fullSlug)
     const visited = getVisited()
     removeAllChildren(graph)

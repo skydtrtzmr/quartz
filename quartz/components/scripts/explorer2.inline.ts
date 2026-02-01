@@ -469,15 +469,14 @@ function flattenTreeRoot(trie: FileTrieNode): FlatNode[] {
 /**
  * 文件夹范围：记录每个文件夹在 flatNodes 中的起止索引
  */
-interface FolderRange {
-  start: number // 文件夹标题在 flatNodes 中的索引
-  end: number // 最后一个子节点的索引
-  folderSlug: string // 文件夹 slug
-  level: number // 层级深度
-}
+// interface FolderRange {
+//   start: number // 文件夹标题在 flatNodes 中的索引
+//   end: number // 最后一个子节点的索引
+//   folderSlug: string // 文件夹 slug
+//   level: number // 层级深度
+// }
 
-// 文件夹范围缓存
-let folderRanges: Map<string, FolderRange> = new Map()
+// let folderRanges: Map<string, FolderRange> = new Map()
 
 /**
  * 计算所有文件夹的范围
@@ -612,6 +611,12 @@ function renderFlatExplorer(
   bottomSpacer.className = "virtual-spacer-bottom"
   bottomSpacer.style.height = `${(totalCount - flatRenderEnd) * DEFAULT_ITEM_HEIGHT}px`
   explorerUl.appendChild(bottomSpacer)
+
+  // 重要：确保当前活动的节点及其祖先高亮（扁平化结构下需要显式设置样式）
+  const activeLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
+  if (activeLink) {
+    highlightPath(activeLink)
+  }
 }
 
 /**
@@ -624,25 +629,26 @@ function refreshFlatExplorer() {
     return
   }
 
-  // 重新扁平化树（使用更新后的 expandedFolders）
-  flatNodes = flattenTreeRoot(currentTrie)
-  // sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
+  // 1. 记录当前滚动位置
+  const scrollTop = (currentExplorerUl as HTMLElement).scrollTop
 
-  // 重新计算文件夹范围（仅在启用吸顶效果时）
-  // if (globalOpts.stickyHeaders) {
-  //   folderRanges = calculateFolderRanges(flatNodes)
-  // }
+  // 2. 重新扁平化树（使用更新后的 expandedFolders）
+  flatNodes = flattenTreeRoot(currentTrie)
 
   console.log(
-    `%c[refreshFlatExplorer] 重新扁平化: ${flatNodes.length} 个节点, expandedFolders: ${expandedFolders.size}${globalOpts.stickyHeaders ? `, folderRanges: ${folderRanges.size}` : ""}`,
+    `%c[refreshFlatExplorer] 重新扁平化: ${flatNodes.length} 个节点, expandedFolders: ${expandedFolders.size}`,
     "color: #00ccff; font-weight: bold",
   )
 
-  // 保存当前滚动位置
-  const scrollTop = currentExplorerUl.scrollTop
-
-  // 重新渲染（保持当前滚动位置）
+  // 3. 重新渲染
   renderFlatExplorer(currentExplorerUl, currentActiveSlug, globalOpts, scrollTop)
+
+  // 4. 重要：渲染完后立即恢复滚动位置（必须锁定 isNavigating 以防触发冗余 update）
+  isNavigating = true
+  currentExplorerUl.scrollTop = scrollTop
+  setTimeout(() => {
+    isNavigating = false
+  }, 50)
 }
 
 /**
@@ -685,6 +691,7 @@ function updateFlatVirtualScroll(
   currentSlug: FullSlug,
   opts: ParsedOptions,
 ) {
+  if (isNavigating) return
   const windowSize = opts.virtualScrollWindowSize || 50
   const scrollTop = explorerUl.scrollTop
   const viewportHeight = explorerUl.clientHeight
@@ -946,6 +953,38 @@ function clearExplorerCache() {
 }
 
 /**
+ * 封装文件树初始化逻辑：获取数据 -> 构建 Trie -> 应用变换
+ * 被全量渲染和缓存注水路径共同调用，方便统一调试性能。
+ */
+async function initializeFileTree(opts: ParsedOptions): Promise<FileTrieNode> {
+  performance.mark("initializeFileTree-start")
+
+  performance.mark("fetchData-start")
+  const data = await fetchData
+  performance.mark("fetchData-end")
+
+  performance.mark("buildTrie-start")
+  const entries = Object.entries(data) as [FullSlug, ContentDetails][]
+  const trie = FileTrieNode.fromEntries(entries)
+  performance.mark("buildTrie-end")
+
+  performance.mark("filterMapSort-start")
+  for (const fn of opts.order) {
+    switch (fn) {
+      case "filter": if (opts.filterFn) trie.filter(opts.filterFn); break
+      case "map": if (opts.mapFn) trie.map(opts.mapFn); break
+      case "sort": if (opts.sortFn) trie.sort(opts.sortFn); break
+    }
+  }
+  performance.mark("filterMapSort-end")
+
+  performance.mark("initializeFileTree-end")
+  performance.measure("initializeFileTree-total", "initializeFileTree-start", "initializeFileTree-end")
+
+  return trie
+}
+
+/**
  * 从缓存恢复 Explorer UI
  */
 function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
@@ -1056,196 +1095,146 @@ async function setupExplorer3(currentSlug: FullSlug) {
       sessionStorage.setItem("explorer3LastBuildTime", serverBuildTime)
     }
 
-    // 优先渲染
-    const explorerUl = explorer.querySelector(".explorer3-ul")
-    if (!explorerUl) {
-      console.log("[setupExplorer3] 不存在 explorer3-ul 元素，跳过。")
+    // SPA 模式极致优化：如果 Trie 已经在内存中且构建时间一致，直接复用
+    if (currentTrie && cachedBuildTime === serverBuildTime) {
+      console.log("%c[setupExplorer3] 进入 SPA 快速复用路径", "color: #00ccff; font-weight: bold")
+
+      const trie = currentTrie
+      const validFolders = new Set(trie.getFolderPaths())
+
+      // 1. 自动展开当前路径的父文件夹
+      const currentPathParts = currentSlug.split("/")
+      let modifiedExpanded = false
+      for (let i = 1; i <= currentPathParts.length; i++) {
+        const ancestorPath = currentPathParts.slice(0, i).join("/") as FullSlug
+        if (validFolders.has(ancestorPath) && !expandedFolders.has(ancestorPath)) {
+          expandedFolders.add(ancestorPath)
+          modifiedExpanded = true
+        }
+      }
+
+      if (modifiedExpanded && opts.useSavedState) saveExpandedState()
+
+      const explorerUl = explorer.querySelector(".explorer3-ul") as HTMLElement
+      if (explorerUl) {
+        // 更新全局活跃 UI 引用
+        currentExplorerUl = explorerUl
+        currentActiveSlug = currentSlug
+
+        // 2. 只有在展开状态改变或 flatNodes 为空时才重新扁平化
+        if (modifiedExpanded || !flatNodes || flatNodes.length === 0) {
+          flatNodes = flattenTreeRoot(currentTrie)
+        }
+
+        // 3. 从持久化缓存还原滚动位置（SPA 跳转后的新元素初始 scrollTop 为 0，必须用缓存）
+        const savedScrollTop = parseInt(sessionStorage.getItem("explorer3ScrollTop") || "0")
+
+        // 4. 刷新渲染（传入持久化的滚动位置以计算正确的虚拟渲染范围，防止 spacer-top 塌陷）
+        renderFlatExplorer(explorerUl, currentSlug, opts, savedScrollTop)
+
+        // 5. 重要：渲染完后立即显式恢复滚动位置（锁定 isNavigating 防止触发冗余 update）
+        isNavigating = true
+        explorerUl.scrollTop = savedScrollTop
+
+        // 6. 重新高亮当前路径（确保 lineage 高亮同步）
+        const activeLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
+        if (activeLink) highlightPath(activeLink)
+
+        setTimeout(() => {
+          isNavigating = false
+        }, 100)
+
+        // 7. 重新绑定虚拟滚动监听
+        setupFlatVirtualScroll(explorerUl, currentSlug, opts)
+      }
+
+      bindEvents(explorer, opts)
+      printPerformance()
       continue
     }
+
+    const explorerUl = explorer.querySelector(".explorer3-ul")
+    if (!explorerUl) continue
+
     const cachedHtml = sessionStorage.getItem("explorer3Html")
     const hasRealContentInCache = cachedHtml && cachedHtml.includes("data-flat-index")
 
     if (hasRealContentInCache) {
-      // ========== 从缓存恢复 ==========
+      // ========== 从缓存恢复 (F5 刷新后的快速展示路径) ==========
       console.log("[setupExplorer3] 从缓存恢复")
       restoreFromCache(explorerUl, currentSlug)
       performance.mark("restoreFromCache-end")
 
-      // 有缓存时：异步初始化，不阻塞
       const initExplorerAsync = async () => {
-        performance.mark("fetchData-start")
-        const data = await fetchData
-        performance.mark("fetchData-end")
-
-        performance.mark("buildTrie-start")
-        const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
-        const trie = FileTrieNode.fromEntries(entries)
-        performance.mark("buildTrie-end")
-
-        performance.mark("filterMapSort-start")
-        for (const fn of opts.order) {
-          switch (fn) {
-            case "filter":
-              if (opts.filterFn) trie.filter(opts.filterFn)
-              break
-            case "map":
-              if (opts.mapFn) trie.map(opts.mapFn)
-              break
-            case "sort":
-              if (opts.sortFn) trie.sort(opts.sortFn)
-              break
-          }
-        }
-        performance.mark("filterMapSort-end")
-
+        const trie = await initializeFileTree(opts)
         currentTrie = trie
         currentExplorerUl = explorerUl
 
-        performance.mark("getFolderPaths-start")
         const validFolders = new Set(trie.getFolderPaths())
-        performance.mark("getFolderPaths-end")
-
         if (opts.useSavedState) {
           const loadedState = loadExpandedState()
           expandedFolders = new Set()
           loadedState.forEach(path => {
-            if (validFolders.has(path as FullSlug)) {
-              expandedFolders.add(path)
-            }
+            if (validFolders.has(path as FullSlug)) expandedFolders.add(path)
           })
-        } else {
-          expandedFolders = new Set()
-          if (opts.folderDefaultState === "open") {
-            validFolders.forEach(path => expandedFolders.add(path))
-          }
         }
 
         const currentPathParts = currentSlug.split("/")
         for (let i = 1; i <= currentPathParts.length; i++) {
           const ancestorPath = currentPathParts.slice(0, i).join("/") as FullSlug
-          if (validFolders.has(ancestorPath)) {
-            expandedFolders.add(ancestorPath)
-          }
+          if (validFolders.has(ancestorPath)) expandedFolders.add(ancestorPath)
         }
 
-        performance.mark("flattenTreeRoot-start")
         flatNodes = flattenTreeRoot(currentTrie)
-        performance.mark("flattenTreeRoot-end")
-
-        if (opts.useSavedState) {
-          saveExpandedState()
-        }
+        if (opts.useSavedState) saveExpandedState()
 
         setupFlatVirtualScroll(explorerUl, currentSlug, opts)
         isNavigating = false
-        console.log("[setupExplorer3] 异步初始化完成")
 
-        // 异步初始化完成后打印各步骤耗时
-        performance.mark("setupExplorer3-end")
-        performance.measure("setupExplorer3-total", "setupExplorer3-start", "setupExplorer3-end")
-        const total = performance.getEntriesByName("setupExplorer3-total").at(-1)?.duration?.toFixed(2) ?? "?"
-        console.log(`%c[setupExplorer3] 异步完成，总耗时: ${total}ms`, "color: #00ff00; font-weight: bold")
-
-        const measures = [
-          { name: "fetchData", start: "fetchData-start", end: "fetchData-end" },
-          { name: "buildTrie", start: "buildTrie-start", end: "buildTrie-end" },
-          { name: "filterMapSort", start: "filterMapSort-start", end: "filterMapSort-end" },
-          { name: "getFolderPaths", start: "getFolderPaths-start", end: "getFolderPaths-end" },
-          { name: "flattenTreeRoot", start: "flattenTreeRoot-start", end: "flattenTreeRoot-end" },
-        ]
-
-        for (const m of measures) {
-          performance.measure(m.name, m.start, m.end)
-          const entry = performance.getEntriesByName(m.name).at(-1)
-          if (entry) {
-            const percent = total !== "?" ? ((entry.duration / Number(total)) * 100).toFixed(1) : "?"
-            console.log(`  - ${m.name}: ${entry.duration.toFixed(2)}ms (${percent}%)`)
-          }
-        }
+        const total = performance.getEntriesByName("initializeFileTree-total").at(-1)?.duration?.toFixed(2) ?? "?"
+        console.log(`%c[setupExplorer3] 异步初始化完成，Trie 构建耗时: ${total}ms`, "color: #00ff00; font-weight: bold")
       }
 
-      requestIdleCallback(() => {
-        initExplorerAsync()
-      })
-
+      // 使用 setTimeout 替代 requestIdleCallback，确保不被 MathJax 等重型组件长时间阻塞
+      setTimeout(() => initExplorerAsync(), 0)
       bindEvents(explorer, opts)
-      continue  // 有缓存时直接进入下一次循环，性能结果在异步完成后打印
+      continue
     }
 
-    performance.mark("fetchData-start")
-    const data = await fetchData
-    performance.mark("fetchData-end")
-
-    performance.mark("buildTrie-start")
-    const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
-    const trie = FileTrieNode.fromEntries(entries)
-    performance.mark("buildTrie-end")
-
-    performance.mark("filterMapSort-start")
-    for (const fn of opts.order) {
-      switch (fn) {
-        case "filter":
-          if (opts.filterFn) trie.filter(opts.filterFn)
-          break
-        case "map":
-          if (opts.mapFn) trie.map(opts.mapFn)
-          break
-        case "sort":
-          if (opts.sortFn) trie.sort(opts.sortFn)
-          break
-      }
-    }
-    performance.mark("filterMapSort-end")
-
-    // 设置全局引用（用于 refreshFlatExplorer）
+    // ========== 全量加载路径 ==========
+    const trie = await initializeFileTree(opts)
     currentTrie = trie
     currentExplorerUl = explorerUl
     currentActiveSlug = currentSlug
 
-    // ========== 步骤 2：状态管理初始化 ==========
-
-    performance.mark("getFolderPaths-start")
-    // 获取所有有效的文件夹路径集合
     const validFolders = new Set(trie.getFolderPaths())
-    performance.mark("getFolderPaths-end")
-
-    // 1. 初始化展开状态
     if (opts.useSavedState && serverBuildTime == cachedBuildTime) {
-      // 从存储加载
       const loadedState = loadExpandedState()
-      // 过滤非文件夹路径
       expandedFolders = new Set()
       loadedState.forEach(path => {
-        if (validFolders.has(path as FullSlug)) {
-          expandedFolders.add(path)
-        }
+        if (validFolders.has(path as FullSlug)) expandedFolders.add(path)
       })
     } else {
-      // 使用默认策略
       expandedFolders = new Set()
       if (opts.folderDefaultState === "open") {
         validFolders.forEach(path => expandedFolders.add(path))
       }
     }
 
-    // 2. 强制展开当前文件的所有父级
     const currentPathParts = currentSlug.split("/")
     for (let i = 1; i <= currentPathParts.length; i++) {
       const ancestorPath = currentPathParts.slice(0, i).join("/") as FullSlug
-      if (validFolders.has(ancestorPath)) {
-        expandedFolders.add(ancestorPath)
-      }
+      if (validFolders.has(ancestorPath)) expandedFolders.add(ancestorPath)
     }
 
-    // 3. 保存更新后的状态（如果启用了保存）
-    if (opts.useSavedState) {
-      saveExpandedState()
-    }
+    if (opts.useSavedState) saveExpandedState()
 
-    // 生成扁平化数据
-    performance.mark("flattenTreeRoot-start")
     flatNodes = flattenTreeRoot(currentTrie)
-    performance.mark("flattenTreeRoot-end")
+
+    // 设置全局引用（用于 refreshFlatExplorer）
+    currentTrie = trie
+    currentExplorerUl = explorerUl
+    currentActiveSlug = currentSlug
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
@@ -1307,8 +1296,7 @@ function printPerformance() {
     { name: "fetchData", start: "fetchData-start", end: "fetchData-end" },
     { name: "buildTrie", start: "buildTrie-start", end: "buildTrie-end" },
     { name: "filterMapSort", start: "filterMapSort-start", end: "filterMapSort-end" },
-    { name: "getFolderPaths", start: "getFolderPaths-start", end: "getFolderPaths-end" },
-    { name: "flattenTreeRoot", start: "flattenTreeRoot-start", end: "flattenTreeRoot-end" },
+    { name: "initializeFileTree", start: "initializeFileTree-start", end: "initializeFileTree-end" },
     { name: "renderFlatExplorer", start: "renderFlatExplorer-start", end: "renderFlatExplorer-end" },
   ]
 
