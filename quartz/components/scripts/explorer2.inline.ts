@@ -1,5 +1,5 @@
 import { FileTrieNode } from "../../util/fileTrie"
-import { FullSlug, resolveRelative } from "../../util/path"
+import { FullSlug } from "../../util/path"
 import { ContentDetails } from "../../plugins/emitters/contentIndex"
 
 // TODO
@@ -484,32 +484,32 @@ let folderRanges: Map<string, FolderRange> = new Map()
  * @param nodes - 扁平化节点数组
  * @returns 文件夹范围 Map
  */
-function calculateFolderRanges(nodes: FlatNode[]): Map<string, FolderRange> {
-  const ranges = new Map<string, FolderRange>()
+// function calculateFolderRanges(nodes: FlatNode[]): Map<string, FolderRange> {
+//   const ranges = new Map<string, FolderRange>()
 
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]
-    if (node.node.isFolder) {
-      const folderSlug = node.node.slug
-      let end = i
+//   for (let i = 0; i < nodes.length; i++) {
+//     const node = nodes[i]
+//     if (node.node.isFolder) {
+//       const folderSlug = node.node.slug
+//       let end = i
 
-      // 找到该文件夹的最后一个子节点
-      for (let j = i + 1; j < nodes.length; j++) {
-        if (nodes[j].level <= node.level) break
-        end = j
-      }
+//       // 找到该文件夹的最后一个子节点
+//       for (let j = i + 1; j < nodes.length; j++) {
+//         if (nodes[j].level <= node.level) break
+//         end = j
+//       }
 
-      ranges.set(folderSlug, {
-        start: i,
-        end,
-        folderSlug,
-        level: node.level,
-      })
-    }
-  }
+//       ranges.set(folderSlug, {
+//         start: i,
+//         end,
+//         folderSlug,
+//         level: node.level,
+//       })
+//     }
+//   }
 
-  return ranges
-}
+//   return ranges
+// }
 
 /**
  * 计算应该吸顶的文件夹索引
