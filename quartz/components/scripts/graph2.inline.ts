@@ -103,6 +103,14 @@ class ObjectPool<T> {
   }
 
   clear(): void {
+    for (const obj of this.pool) {
+      this.resetFn(obj)
+      // @ts-ignore - Graphics/Text 对象有 destroy 方法
+      if (typeof obj.destroy === "function") {
+        // @ts-ignore
+        obj.destroy({ children: true, texture: true, baseTexture: true })
+      }
+    }
     this.pool = []
   }
 
@@ -1029,10 +1037,8 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     )
   }
 
-  let stopAnimation = false
+  let animationId: number | null = null
   function animate(time: number) {
-    if (stopAnimation) return
-
     // 渲染所有节点
     for (const n of nodeRenderData) {
       const { x, y } = n.simulationData
@@ -1083,12 +1089,21 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
 
     tweens.forEach((t) => t.update(time))
     app.renderer.render(stage)
-    requestAnimationFrame(animate)
+    animationId = requestAnimationFrame(animate)
   }
 
-  requestAnimationFrame(animate)
+  animationId = requestAnimationFrame(animate)
   return () => {
-    stopAnimation = true
+    if (animationId !== null) {
+      cancelAnimationFrame(animationId)
+      animationId = null
+    }
+    simulation.stop()  // 停止 D3 forceSimulation，释放内部定时器
+    tweens.forEach((t) => t.stop())
+    tweens.clear()
+    graphicsPool.clear()    // 清理对象池，释放 GPU 内存
+    textPool.clear()
+    linkGraphicsPool.clear()
     app.destroy()
   }
 }
