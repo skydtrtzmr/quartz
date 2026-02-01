@@ -626,7 +626,7 @@ function refreshFlatExplorer() {
 
   // 重新扁平化树（使用更新后的 expandedFolders）
   flatNodes = flattenTreeRoot(currentTrie)
-  sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
+  // sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
 
   // 重新计算文件夹范围（仅在启用吸顶效果时）
   // if (globalOpts.stickyHeaders) {
@@ -984,12 +984,32 @@ async function setupExplorer3(currentSlug: FullSlug) {
     // 保存全局配置
     globalOpts = opts
 
+    const metadata = await fetchMetadata
+    const serverBuildTime = metadata.lastBuildTime
+    const cachedBuildTime = sessionStorage.getItem("explorer3LastBuildTime")
+    console.log('serverBuildTime:', serverBuildTime)
+    console.log('cachedBuildTime:', cachedBuildTime)
+
+    if (cachedBuildTime && serverBuildTime == cachedBuildTime) {
+      console.log('[setupExplorer3] 构建时间一致，不需要清除缓存。');
+      // TODO 补充缓存清除代码
+    } else {
+      console.log('[setupExplorer3] 构建时间不一致，需要清除缓存。');
+
+      sessionStorage.setItem("explorer3LastBuildTime", serverBuildTime)
+    }
+
     // 优先渲染
     const explorerUl = explorer.querySelector(".explorer3-ul")
-    if (!explorerUl) continue
+    if (!explorerUl) {
+      console.log('[setupExplorer3] 不存在explorer3-ul 元素，跳过。');
+      continue
+    }
     const cachedHtml = sessionStorage.getItem("explorer3Html")
     const hasRealContentInCache = cachedHtml && cachedHtml.includes("data-flat-index")
-    if (hasRealContentInCache) {
+    console.log('hasRealContentInCache:', hasRealContentInCache);
+
+    if (hasRealContentInCache && cachedBuildTime == serverBuildTime) {
       // ========== 从缓存恢复 ==========
       console.log("[setupExplorer3] 从缓存恢复")
       restoreFromCache(explorerUl, currentSlug)
@@ -1001,16 +1021,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
       serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
     )
 
-    const metadata = await fetchMetadata
-    const serverBuildTime = metadata.lastBuildTime
-    const cachedBuildTime = sessionStorage.getItem("explorer3LastBuildTime")
-    if (cachedBuildTime && serverBuildTime !== cachedBuildTime) {
-      console.log('[setupExplorer3] 构建时间不一致，需要清除缓存。');
-      sessionStorage.setItem("explorer3LastBuildTime", serverBuildTime)
-      // TODO 补充缓存清除代码
-    } else {
-      console.log('[setupExplorer3] 构建时间一致，不需要清除缓存。');
-    }
+
 
     const data = await fetchData
     const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
@@ -1093,7 +1104,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // 生成扁平化数据
     flatNodes = flattenTreeRoot(currentTrie)
-    sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
+    // sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
 
     // 计算文件夹范围（仅在启用吸顶效果时）
     // if (opts.stickyHeaders) {
@@ -1102,7 +1113,9 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
-    if (!hasRealContentInCache) {
+    if (!hasRealContentInCache || cachedBuildTime != serverBuildTime) {
+      console.log('不存在有效缓存，需要重新渲染。');
+
       const oldTopSpacer = explorerUl.querySelector(".virtual-spacer-top")
       const oldBottomSpacer = explorerUl.querySelector(".virtual-spacer-bottom")
       // const oldStickyHeaders = explorerUl.querySelector(".sticky-headers")
