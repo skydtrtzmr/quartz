@@ -929,6 +929,31 @@ function navigateToFile(targetSlug: FullSlug): boolean {
 }
 
 /**
+ * 从缓存恢复 Explorer UI
+ */
+function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
+  explorerUl.innerHTML = sessionStorage.getItem("explorer3Html") || ""
+  explorerUl.scrollTop = parseInt(sessionStorage.getItem("explorer3ScrollTop") || "0")
+  flatRenderStart = parseInt(sessionStorage.getItem("explorer3RenderStart") || "0")
+  flatRenderEnd = parseInt(sessionStorage.getItem("explorer3RenderEnd") || "0")
+  try {
+    expandedFolders = new Set(
+      JSON.parse(sessionStorage.getItem("explorer3ExpandedFolders") || "[]"),
+    )
+  } catch {
+    expandedFolders = new Set()
+  }
+
+  // 更新 active 状态
+  const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
+  if (currentLink) {
+    highlightPath(currentLink)
+  }
+
+  console.log("[restoreFromCache] 恢复完成")
+}
+
+/**
  * 初始化 Explorer3 组件
  * 核心入口函数，在每次 nav 事件时调用
  * 负责：解析配置、恢复状态、构建文件树、绑定事件
@@ -958,6 +983,17 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // 保存全局配置
     globalOpts = opts
+
+    // 优先渲染
+    const explorerUl = explorer.querySelector(".explorer3-ul")
+    if (!explorerUl) continue
+    const cachedHtml = sessionStorage.getItem("explorer3Html")
+    const hasRealContentInCache = cachedHtml && cachedHtml.includes("data-flat-index")
+    if (hasRealContentInCache) {
+      // ========== 从缓存恢复 ==========
+      console.log("[setupExplorer3] 从缓存恢复")
+      restoreFromCache(explorerUl, currentSlug)
+    }
 
     const storageTree = localStorage.getItem("fileTree3")
     const serializedExplorerState = storageTree && opts.useSavedState ? JSON.parse(storageTree) : []
@@ -1005,8 +1041,8 @@ async function setupExplorer3(currentSlug: FullSlug) {
     })
     sessionStorage.setItem("explorer3CurrentExplorerState", JSON.stringify(currentExplorerState))
 
-    const explorerUl = explorer.querySelector(".explorer3-ul")
-    if (!explorerUl) continue
+    // const explorerUl = explorer.querySelector(".explorer3-ul")
+    // if (!explorerUl) continue
 
     // 设置全局引用（用于 refreshFlatExplorer）
     currentTrie = trie
@@ -1015,8 +1051,8 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // 清空旧内容（SPA 导航时可能存在旧节点）
     // 保留 OverflowList 组件的结构，只清空文件树节点
-    const existingNodes = explorerUl.querySelectorAll(":scope > li")
-    existingNodes.forEach((node) => node.remove())
+    // const existingNodes = explorerUl.querySelectorAll(":scope > li")
+    // existingNodes.forEach((node) => node.remove())
 
 
     // ========== 步骤 2：状态管理初始化 ==========
@@ -1052,8 +1088,6 @@ async function setupExplorer3(currentSlug: FullSlug) {
       }
     }
 
-    sessionStorage.setItem("explorer3ExpandedFolders", JSON.stringify(Array.from(expandedFolders)))
-
     // 保存合并后的状态
     saveExpandedState()
 
@@ -1068,27 +1102,30 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
-    const oldTopSpacer = explorerUl.querySelector(".virtual-spacer-top")
-    const oldBottomSpacer = explorerUl.querySelector(".virtual-spacer-bottom")
-    // const oldStickyHeaders = explorerUl.querySelector(".sticky-headers")
-    if (oldTopSpacer) oldTopSpacer.remove()
-    if (oldBottomSpacer) oldBottomSpacer.remove()
-    // if (oldStickyHeaders) oldStickyHeaders.remove()
+    if (!hasRealContentInCache) {
+      const oldTopSpacer = explorerUl.querySelector(".virtual-spacer-top")
+      const oldBottomSpacer = explorerUl.querySelector(".virtual-spacer-bottom")
+      // const oldStickyHeaders = explorerUl.querySelector(".sticky-headers")
+      if (oldTopSpacer) oldTopSpacer.remove()
+      if (oldBottomSpacer) oldBottomSpacer.remove()
+      // if (oldStickyHeaders) oldStickyHeaders.remove()
 
-    // 获取保存的滚动位置（用于计算初始渲染范围）
-    const savedScrollTop = sessionStorage.getItem("explorer3ScrollTop")
-    const initialScrollTop = savedScrollTop ? parseInt(savedScrollTop) : 0
+      // 获取保存的滚动位置（用于计算初始渲染范围）
+      const savedScrollTop = sessionStorage.getItem("explorer3ScrollTop")
+      const initialScrollTop = savedScrollTop ? parseInt(savedScrollTop) : 0
 
-    // 使用扁平化数据渲染（传入滚动位置以计算正确的初始渲染范围）
-    renderFlatExplorer(explorerUl, currentSlug, opts, initialScrollTop)
+      // 使用扁平化数据渲染（传入滚动位置以计算正确的初始渲染范围）
+      renderFlatExplorer(explorerUl, currentSlug, opts, initialScrollTop)
+
+
+      // 恢复滚动位置
+      if (savedScrollTop) {
+        explorerUl.scrollTop = initialScrollTop
+      }
+    }
 
     // 设置单滚动条虚拟滚动监听
     setupFlatVirtualScroll(explorerUl, currentSlug, opts)
-
-    // 恢复滚动位置
-    if (savedScrollTop) {
-      explorerUl.scrollTop = initialScrollTop
-    }
 
     // 首次加载时禁用虚拟滚动更新
     isNavigating = true
@@ -1141,8 +1178,13 @@ async function setupExplorer3(currentSlug: FullSlug) {
 document.addEventListener("prenav", async () => {
   const explorerUl = document.querySelector(".explorer3-ul")
   if (!explorerUl) return
+  // 保存各个数据到独立的 sessionStorage 键
+  sessionStorage.setItem("explorer3Html", explorerUl.innerHTML)
   sessionStorage.setItem("explorer3ScrollTop", explorerUl.scrollTop.toString())
-  console.log(`%c[prenav] 保存滚动位置: ${explorerUl.scrollTop}`, "color: #888")
+  sessionStorage.setItem("explorer3RenderStart", flatRenderStart.toString())
+  sessionStorage.setItem("explorer3RenderEnd", flatRenderEnd.toString())
+  sessionStorage.setItem("explorer3ExpandedFolders", JSON.stringify(Array.from(expandedFolders)))
+  console.log(`%c[prenav] 保存滚动位置: ${explorerUl.scrollTop}，渲染范围：${flatRenderStart}-${flatRenderEnd}，展开状态：${JSON.stringify(Array.from(expandedFolders))}`, "color: #888")
 })
 
 document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
