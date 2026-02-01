@@ -1139,7 +1139,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
         // 异步初始化完成后打印各步骤耗时
         performance.mark("setupExplorer3-end")
         performance.measure("setupExplorer3-total", "setupExplorer3-start", "setupExplorer3-end")
-        const total = performance.getEntriesByName("setupExplorer3-total")[0]?.duration?.toFixed(2) ?? "?"
+        const total = performance.getEntriesByName("setupExplorer3-total").at(-1)?.duration?.toFixed(2) ?? "?"
         console.log(`%c[setupExplorer3] 异步完成，总耗时: ${total}ms`, "color: #00ff00; font-weight: bold")
 
         const measures = [
@@ -1152,7 +1152,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
 
         for (const m of measures) {
           performance.measure(m.name, m.start, m.end)
-          const entry = performance.getEntriesByName(m.name)[0]
+          const entry = performance.getEntriesByName(m.name).at(-1)
           if (entry) {
             const percent = total !== "?" ? ((entry.duration / Number(total)) * 100).toFixed(1) : "?"
             console.log(`  - ${m.name}: ${entry.duration.toFixed(2)}ms (${percent}%)`)
@@ -1308,11 +1308,11 @@ function printPerformance() {
     { name: "renderFlatExplorer", start: "renderFlatExplorer-start", end: "renderFlatExplorer-end" },
   ]
 
-  const total = performance.getEntriesByName("setupExplorer3-total")[0]?.duration?.toFixed(2) ?? "?"
+  const total = performance.getEntriesByName("setupExplorer3-total").at(-1)?.duration?.toFixed(2) ?? "?"
   console.log(`%c[setupExplorer3] 总耗时: ${total}ms`, "color: #00ff00; font-weight: bold")
 
   for (const m of measures) {
-    const entry = performance.getEntriesByName(m.name)[0]
+    const entry = performance.getEntriesByName(m.name).at(-1)
     if (entry) {
       const percent = total !== "?" ? ((entry.duration / Number(total)) * 100).toFixed(1) : "?"
       console.log(`  - ${m.name}: ${entry.duration.toFixed(2)}ms (${percent}%)`)
@@ -1343,7 +1343,7 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
 
   performance.mark("nav-end")
   performance.measure("nav-total", "nav-start", "nav-end")
-  const navTotal = performance.getEntriesByName("nav-total")[0]?.duration?.toFixed(2) ?? "?"
+  const navTotal = performance.getEntriesByName("nav-total").at(-1)?.duration?.toFixed(2) ?? "?"
   console.log(`%c[NAV事件] 总耗时: ${navTotal}ms`, "color: #ff00ff; font-weight: bold")
 
   for (const explorer of document.getElementsByClassName("explorer3")) {
