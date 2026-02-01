@@ -15,6 +15,10 @@ import { ContentDetails } from "../../plugins/emitters/contentIndex"
 // - [ ]  滚动定位至目标文件节点（即使其当前未渲染）
 // - [ ]  若目标文件不在当前虚拟渲染窗口内，主动触发增量重渲染以确保其可见
 
+// 现存缺陷：
+// 首次加载页面后，若再次刷新， [setupExplorer3] 异步完成的耗时会变长，
+// 且此时必须等待 [setupExplorer3] 异步完成再操作，否则可能导致再也没法正常渲染目录。
+
 type MaybeHTMLElement = HTMLElement | undefined
 
 interface ParsedOptions {
