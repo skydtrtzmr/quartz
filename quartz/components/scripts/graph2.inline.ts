@@ -1019,6 +1019,9 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
         ])
         .scaleExtent([0.25, 4])
         .on("zoom", ({ transform }) => {
+          // 防止 cleanup 后 zoom 事件仍被触发
+          if (appDestroyed) return
+
           currentTransform = transform
           stage.scale.set(transform.k, transform.k)
           stage.position.set(transform.x, transform.y)
@@ -1038,7 +1041,11 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   }
 
   let animationId: number | null = null
+  let appDestroyed = false
   function animate(time: number) {
+    // 防止 cleanup 后动画仍在运行
+    if (appDestroyed) return
+
     // 渲染所有节点
     for (const n of nodeRenderData) {
       const { x, y } = n.simulationData
@@ -1094,6 +1101,7 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
 
   animationId = requestAnimationFrame(animate)
   return () => {
+    appDestroyed = true  // 设置标志位，阻止 zoom 和 animate 继续执行
     if (animationId !== null) {
       cancelAnimationFrame(animationId)
       animationId = null
