@@ -915,6 +915,8 @@ function navigateToFile(targetSlug: FullSlug): boolean {
     const targetLink = targetLi.querySelector("a")
     if (targetLink) {
       highlightPath(targetLink)
+    } else {
+      clearHighlight()
     }
     targetLi.scrollIntoView({ behavior: "instant", block: "center" })
     console.log(`%c[导航定位] 已定位到: ${targetSlug}`, "color: #00cc88")
@@ -944,9 +946,49 @@ function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
   const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
   if (currentLink) {
     highlightPath(currentLink)
+  } else {
+    clearHighlight()
   }
 
   console.log("[restoreFromCache] 恢复完成")
+}
+
+function bindEvents(explorer: HTMLElement, opts: ParsedOptions) {
+  // 定位按钮事件
+  const locateBtn = explorer.querySelector(".locate-current-btn")
+  if (locateBtn) {
+    locateBtn.addEventListener("click", locateCurrentFile)
+    window.addCleanup(() => locateBtn.removeEventListener("click", locateCurrentFile))
+  }
+
+  // 展开/折叠面板按钮
+  const explorerButtons = explorer.getElementsByClassName(
+    "explorer3-toggle",
+  ) as HTMLCollectionOf<HTMLElement>
+  for (const button of explorerButtons) {
+    button.addEventListener("click", toggleExplorer)
+    window.addCleanup(() => button.removeEventListener("click", toggleExplorer))
+  }
+
+  // 文件夹点击按钮（collapse 模式）
+  if (opts.folderClickBehavior === "collapse") {
+    const folderButtons = explorer.getElementsByClassName(
+      "folder3-button",
+    ) as HTMLCollectionOf<HTMLElement>
+    for (const button of folderButtons) {
+      button.addEventListener("click", toggleFolder)
+      window.addCleanup(() => button.removeEventListener("click", toggleFolder))
+    }
+  }
+
+  // 文件夹图标点击
+  const folderIcons = explorer.getElementsByClassName(
+    "folder3-icon",
+  ) as HTMLCollectionOf<HTMLElement>
+  for (const icon of folderIcons) {
+    icon.addEventListener("click", toggleFolder)
+    window.addCleanup(() => icon.removeEventListener("click", toggleFolder))
+  }
 }
 
 /**
@@ -1115,39 +1157,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
       setTimeout(unlockNavigating, 500)
     }
 
-    // 定位按钮事件
-    const locateBtn = explorer.querySelector(".locate-current-btn")
-    if (locateBtn) {
-      locateBtn.addEventListener("click", locateCurrentFile)
-      window.addCleanup(() => locateBtn.removeEventListener("click", locateCurrentFile))
-    }
-
-    // 事件监听
-    const explorerButtons = explorer.getElementsByClassName(
-      "explorer3-toggle",
-    ) as HTMLCollectionOf<HTMLElement>
-    for (const button of explorerButtons) {
-      button.addEventListener("click", toggleExplorer)
-      window.addCleanup(() => button.removeEventListener("click", toggleExplorer))
-    }
-
-    if (opts.folderClickBehavior === "collapse") {
-      const folderButtons = explorer.getElementsByClassName(
-        "folder3-button",
-      ) as HTMLCollectionOf<HTMLElement>
-      for (const button of folderButtons) {
-        button.addEventListener("click", toggleFolder)
-        window.addCleanup(() => button.removeEventListener("click", toggleFolder))
-      }
-    }
-
-    const folderIcons = explorer.getElementsByClassName(
-      "folder3-icon",
-    ) as HTMLCollectionOf<HTMLElement>
-    for (const icon of folderIcons) {
-      icon.addEventListener("click", toggleFolder)
-      window.addCleanup(() => icon.removeEventListener("click", toggleFolder))
-    }
+    bindEvents(explorer, opts)
   }
 }
 
