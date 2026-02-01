@@ -1040,7 +1040,7 @@ async function setupExplorer3(currentSlug: FullSlug) {
     const validFolders = new Set(trie.getFolderPaths())
 
     // 1. 初始化展开状态
-    if (opts.useSavedState) {
+    if (opts.useSavedState && serverBuildTime == cachedBuildTime) {
       // 从存储加载
       const loadedState = loadExpandedState()
       // 过滤非文件夹路径
