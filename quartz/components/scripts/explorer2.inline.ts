@@ -31,11 +31,6 @@ interface ParsedOptions {
   order: "sort" | "filter" | "map"[]
 }
 
-type FolderState = {
-  path: string
-  collapsed: boolean
-}
-
 // ========== 步骤 1：扁平化数据层 ==========
 // 扁平化节点：树形结构转换为扁平列表后的节点
 interface FlatNode {
@@ -45,7 +40,6 @@ interface FlatNode {
   index: number // 在扁平数组中的索引
 }
 
-let currentExplorerState: Array<FolderState>
 let globalOpts: ParsedOptions | null = null
 let currentActiveSlug: FullSlug | null = null // 当前活跃文件
 let isNavigating: boolean = false // 导航锁定标志，防止滚动事件干扰定位
@@ -314,36 +308,38 @@ const DEFAULT_ITEM_HEIGHT = 38
 /**
  * 从 localStorage 加载展开状态
  */
+/**
+ * 从 localStorage 加载展开状态
+ * 统一使用 string[] 格式
+ */
+/**
+ * 从 sessionStorage 加载展开状态
+ * 统一使用 string[] 格式
+ */
 function loadExpandedState(): Set<string> {
+  const stored = sessionStorage.getItem("expandedFolders")
+  if (!stored) return new Set()
 
-  // 回退方案：从旧的 fileTree3 迁移
-  const oldState = JSON.parse(localStorage.getItem("fileTree3") || "[]")
-  const expanded = oldState
-    .filter((state: FolderState) => !state.collapsed)
-    .map((state: FolderState) => state.path)
-
-  console.log(
-    `%c[loadExpandedState] 从旧 fileTree3 迁移: ${expanded.length} 个文件夹`,
-    "color: #ffaa00",
-  )
-  return new Set(expanded)
+  try {
+    const parsed = JSON.parse(stored)
+    if (Array.isArray(parsed) && (parsed.length === 0 || typeof parsed[0] === "string")) {
+      return new Set(parsed)
+    }
+  } catch (e) {
+    console.error("[loadExpandedState] 解析错误", e)
+  }
+  return new Set()
 }
 
 /**
- * 保存展开状态到 localStorage
- * 格式：FolderState[]，与 fileTree3 兼容
+ * 保存展开状态到 sessionStorage
+ * 统一使用 string[] 格式
  */
 function saveExpandedState() {
-  if (!currentExplorerState) return
-
-  const folderStates = currentExplorerState.map((item) => ({
-    path: item.path,
-    collapsed: !expandedFolders.has(item.path),
-  }))
-
-  localStorage.setItem("fileTree3", JSON.stringify(folderStates))
+  const expandedArray = Array.from(expandedFolders)
+  sessionStorage.setItem("expandedFolders", JSON.stringify(expandedArray))
   console.log(
-    `%c[saveExpandedState] 保存到 fileTree3: ${folderStates.length} 个文件夹状态`,
+    `%c[saveExpandedState] 保存状态: ${expandedArray.length} 个展开文件夹`,
     "color: #00ff00",
   )
 }
@@ -936,13 +932,13 @@ function restoreFromCache(explorerUl: Element, currentSlug: FullSlug) {
   explorerUl.scrollTop = parseInt(sessionStorage.getItem("explorer3ScrollTop") || "0")
   flatRenderStart = parseInt(sessionStorage.getItem("explorer3RenderStart") || "0")
   flatRenderEnd = parseInt(sessionStorage.getItem("explorer3RenderEnd") || "0")
-  try {
-    expandedFolders = new Set(
-      JSON.parse(sessionStorage.getItem("explorer3ExpandedFolders") || "[]"),
-    )
-  } catch {
-    expandedFolders = new Set()
-  }
+
+  // 这里的 explorer3ExpandedFolders 已经废弃，应该通过 loadExpandedState 加载 expandedFolders
+  // 但为了兼容 prenav 中可能保存的状态，如果在同一会话中，
+  // 只要 expandedFolders 是正确保存的，这里可以留空，
+  // 因为 setupExplorer3 后续会调用 loadExpandedState。
+  // expandedFolders 初始化留给 setupExplorer3 处理。
+  expandedFolders = new Set()
 
   // 更新 active 状态
   const currentLink = explorerUl.querySelector(`a[data-for="${currentSlug}"]`)
@@ -1015,14 +1011,6 @@ async function setupExplorer3(currentSlug: FullSlug) {
       restoreFromCache(explorerUl, currentSlug)
     }
 
-    const storageTree = localStorage.getItem("fileTree3")
-    const serializedExplorerState = storageTree && opts.useSavedState ? JSON.parse(storageTree) : []
-    const oldIndex = new Map<string, boolean>(
-      serializedExplorerState.map((entry: FolderState) => [entry.path, entry.collapsed]),
-    )
-
-
-
     const data = await fetchData
     const entries = [...Object.entries(data)] as [FullSlug, ContentDetails][]
     const trie = FileTrieNode.fromEntries(entries)
@@ -1041,75 +1029,51 @@ async function setupExplorer3(currentSlug: FullSlug) {
       }
     }
 
-    const folderPaths = trie.getFolderPaths()
-    currentExplorerState = folderPaths.map((path) => {
-      const previousState = oldIndex.get(path)
-      return {
-        path,
-        collapsed:
-          previousState === undefined ? opts.folderDefaultState === "collapsed" : previousState,
-      }
-    })
-    sessionStorage.setItem("explorer3CurrentExplorerState", JSON.stringify(currentExplorerState))
-
-    // const explorerUl = explorer.querySelector(".explorer3-ul")
-    // if (!explorerUl) continue
-
     // 设置全局引用（用于 refreshFlatExplorer）
     currentTrie = trie
     currentExplorerUl = explorerUl
     currentActiveSlug = currentSlug
 
-    // 清空旧内容（SPA 导航时可能存在旧节点）
-    // 保留 OverflowList 组件的结构，只清空文件树节点
-    // const existingNodes = explorerUl.querySelectorAll(":scope > li")
-    // existingNodes.forEach((node) => node.remove())
-
-
     // ========== 步骤 2：状态管理初始化 ==========
-    // 从 localStorage 加载展开状态（新方式）
-    const savedExpandedFolders = loadExpandedState()
 
-    // 从 currentExplorerState 初始化（兼容旧方式）
-    const stateExpandedFolders = new Set(
-      currentExplorerState.filter((item) => !item.collapsed).map((item) => item.path),
-    )
+    // 获取所有有效的文件夹路径集合
+    const validFolders = new Set(trie.getFolderPaths())
 
-    // 合并两种来源
-    expandedFolders = new Set([...savedExpandedFolders, ...stateExpandedFolders])
+    // 1. 初始化展开状态
+    if (opts.useSavedState) {
+      // 从存储加载
+      const loadedState = loadExpandedState()
+      // 过滤非文件夹路径
+      expandedFolders = new Set()
+      loadedState.forEach(path => {
+        if (validFolders.has(path as FullSlug)) {
+          expandedFolders.add(path)
+        }
+      })
+    } else {
+      // 使用默认策略
+      expandedFolders = new Set()
+      if (opts.folderDefaultState === "open") {
+        validFolders.forEach(path => expandedFolders.add(path))
+      }
+    }
 
-    // 自动展开当前路径上的所有父级文件夹
+    // 2. 强制展开当前文件的所有父级
     const currentPathParts = currentSlug.split("/")
-    for (let i = 1; i < currentPathParts.length; i++) {
-      const ancestorPath = currentPathParts.slice(0, i).join("/") + "/index"
-      // 检查这个路径是否是一个文件夹
-      const folderState = currentExplorerState.find((item) => item.path === ancestorPath)
-      if (folderState) {
+    for (let i = 1; i <= currentPathParts.length; i++) {
+      const ancestorPath = currentPathParts.slice(0, i).join("/") as FullSlug
+      if (validFolders.has(ancestorPath)) {
         expandedFolders.add(ancestorPath)
       }
     }
-    // 也检查直接的父文件夹路径（不带 /index）
-    for (let i = 1; i <= currentPathParts.length; i++) {
-      const ancestorPath = currentPathParts.slice(0, i).join("/")
-      const folderState = currentExplorerState.find((item) =>
-        item.path === ancestorPath || item.path === ancestorPath + "/index"
-      )
-      if (folderState) {
-        expandedFolders.add(folderState.path)
-      }
-    }
 
-    // 保存合并后的状态
-    saveExpandedState()
+    // 3. 保存更新后的状态（如果启用了保存）
+    if (opts.useSavedState) {
+      saveExpandedState()
+    }
 
     // 生成扁平化数据
     flatNodes = flattenTreeRoot(currentTrie)
-    // sessionStorage.setItem("explorer3flatNodes", JSON.stringify(flatNodes))
-
-    // 计算文件夹范围（仅在启用吸顶效果时）
-    // if (opts.stickyHeaders) {
-    //   folderRanges = calculateFolderRanges(flatNodes)
-    // }
 
     // ========== 扁平化渲染 ==========
     // 清空旧的占位元素
@@ -1196,8 +1160,7 @@ document.addEventListener("prenav", async () => {
   sessionStorage.setItem("explorer3ScrollTop", explorerUl.scrollTop.toString())
   sessionStorage.setItem("explorer3RenderStart", flatRenderStart.toString())
   sessionStorage.setItem("explorer3RenderEnd", flatRenderEnd.toString())
-  sessionStorage.setItem("explorer3ExpandedFolders", JSON.stringify(Array.from(expandedFolders)))
-  console.log(`%c[prenav] 保存滚动位置: ${explorerUl.scrollTop}，渲染范围：${flatRenderStart}-${flatRenderEnd}，展开状态：${JSON.stringify(Array.from(expandedFolders))}`, "color: #888")
+  console.log(`%c[prenav] 保存滚动位置: ${explorerUl.scrollTop}，渲染范围：${flatRenderStart}-${flatRenderEnd}`, "color: #888")
 })
 
 document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
