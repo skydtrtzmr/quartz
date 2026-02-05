@@ -201,60 +201,126 @@ if (!(window as any).graph2Initialized) {
       validLinks.add(virtualSlug)
     }
 
-    const tweens = new Map<string, TweenNode>()
-    for (const [source, details] of data.entries()) {
-      const outgoing = details.links ?? []
-
-      for (const dest of outgoing) {
-        if (validLinks.has(dest)) {
-          links.push({ source: source, target: dest })
-        }
-      }
-
-      if (showTags) {
-        const localTags = details.tags
-          .filter((tag) => !removeTags.includes(tag))
-          .map((tag) => simplifySlug(("tags/" + tag) as FullSlug))
-
-        tags.push(...localTags.filter((tag) => !tags.includes(tag)))
-
-        for (const tag of localTags) {
-          links.push({ source: source, target: tag })
-        }
-      }
-    }
-
-    // 处理虚拟节点的链接（虚拟节点作为源节点）
-    for (const [virtualSource, vDetails] of virtualNodeData.entries()) {
-      for (const dest of vDetails.links) {
-        if (validLinks.has(dest)) {
-          links.push({ source: virtualSource, target: dest })
-        }
-      }
-    }
-
+    // 全局 graph 时的标识
+    const isGlobalGraph = depth < 0
     const neighbourhood = new Set<SimpleSlug>()
-    const wl: (SimpleSlug | "__SENTINEL")[] = [slug, "__SENTINEL"]
-    if (depth >= 0) {
-      while (depth >= 0 && wl.length > 0) {
-        // compute neighbours
-        const cur = wl.shift()!
-        if (cur === "__SENTINEL") {
-          depth--
-          wl.push("__SENTINEL")
-        } else {
-          neighbourhood.add(cur)
-          const outgoing = links.filter((l) => l.source === cur)
-          const incoming = links.filter((l) => l.target === cur)
-          wl.push(...outgoing.map((l) => l.target), ...incoming.map((l) => l.source))
+
+    // ============ 优化3: 优化局部图谱的邻域计算 ============
+    // 局部图谱：使用 BFS 只处理邻域相关节点，避免遍历所有节点
+    // 全局图谱：保持原有逻辑，构建完整链接图
+    if (!isGlobalGraph) {
+      console.log(`[DEBUG] 局部图谱：使用优化的 BFS 邻域计算 (depth: ${depth})`)
+      const startTime = performance.now()
+
+      // BFS 队列：{slug, currentDepth}
+      const queue: Array<{ slug: SimpleSlug; depth: number }> = [{ slug, depth: 0 }]
+      const visited = new Set<SimpleSlug>()
+
+      while (queue.length > 0) {
+        const { slug: current, depth: currentDepth } = queue.shift()!
+
+        if (visited.has(current)) continue
+        visited.add(current)
+        neighbourhood.add(current)
+
+        // 只有在深度允许的情况下才继续扩展邻居
+        if (currentDepth >= depth) continue
+
+        // 获取当前节点的数据
+        const currentData = data.get(current) ?? virtualNodeData.get(current)
+
+        // 处理当前节点的出链接
+        if (currentData) {
+          const outgoing = (currentData as any).links ?? []
+          for (const dest of outgoing) {
+            if (validLinks.has(dest)) {
+              links.push({ source: current, target: dest })
+              queue.push({ slug: dest, depth: currentDepth + 1 })
+            }
+          }
+
+          // 处理标签（如果启用）
+          if (showTags && (currentData as any).tags) {
+            const localTags = (currentData as any).tags
+              .filter((tag: string) => !removeTags.includes(tag))
+              .map((tag: string) => simplifySlug(("tags/" + tag) as FullSlug))
+
+            for (const tag of localTags) {
+              if (!tags.includes(tag)) tags.push(tag)
+              links.push({ source: current, target: tag })
+              neighbourhood.add(tag)
+            }
+          }
+        }
+
+        // ⚠️ 关键修复：在 BFS 过程中同时处理入链接
+        // 查找所有指向当前节点的节点（入链接的源节点）
+        for (const [source, details] of data.entries()) {
+          const outgoing = details.links ?? []
+          if (outgoing.includes(current)) {
+            links.push({ source, target: current })
+            queue.push({ slug: source, depth: currentDepth + 1 })
+          }
+        }
+
+        // 检查虚拟节点的入链接
+        for (const [virtualSource, vDetails] of virtualNodeData.entries()) {
+          if (vDetails.links.includes(current)) {
+            links.push({ source: virtualSource, target: current })
+            queue.push({ slug: virtualSource, depth: currentDepth + 1 })
+          }
         }
       }
+
+      const endTime = performance.now()
+      console.log(`[DEBUG] BFS 邻域计算完成 - 耗时: ${(endTime - startTime).toFixed(2)}ms, 邻域节点数: ${neighbourhood.size}, 链接数: ${links.length}`)
     } else {
+      // 全局图谱：保持原有逻辑，构建完整链接图
+      console.log("[DEBUG] 全局图谱：使用完整链接图构建")
+      const startTime = performance.now()
+
+      for (const [source, details] of data.entries()) {
+        const outgoing = details.links ?? []
+
+        for (const dest of outgoing) {
+          if (validLinks.has(dest)) {
+            links.push({ source: source, target: dest })
+          }
+        }
+
+        if (showTags) {
+          const localTags = details.tags
+            .filter((tag) => !removeTags.includes(tag))
+            .map((tag) => simplifySlug(("tags/" + tag) as FullSlug))
+
+          tags.push(...localTags.filter((tag) => !tags.includes(tag)))
+
+          for (const tag of localTags) {
+            links.push({ source: source, target: tag })
+          }
+        }
+      }
+
+      // 处理虚拟节点的链接（虚拟节点作为源节点）
+      for (const [virtualSource, vDetails] of virtualNodeData.entries()) {
+        for (const dest of vDetails.links) {
+          if (validLinks.has(dest)) {
+            links.push({ source: virtualSource, target: dest })
+          }
+        }
+      }
+
+      // 全局图谱：添加所有节点到邻域
       validLinks.forEach((id) => neighbourhood.add(id))
       if (showTags) tags.forEach((tag) => neighbourhood.add(tag))
-      // 添加所有虚拟节点到邻域
       virtualNodeData.forEach((_, virtualSlug) => neighbourhood.add(virtualSlug))
+
+      const endTime = performance.now()
+      console.log(`[DEBUG] 全局链接图构建完成 - 耗时: ${(endTime - startTime).toFixed(2)}ms, 节点数: ${neighbourhood.size}, 链接数: ${links.length}`)
     }
+
+    // 用于动画的 tween 集合
+    const tweens = new Map<string, TweenNode>()
 
     const allNodes: NodeData[] = [...neighbourhood].map((url) => {
       const text = url.startsWith("tags/")
@@ -275,9 +341,6 @@ if (!(window as any).graph2Initialized) {
         source: allNodes.find((n) => n.id === l.source)!,
         target: allNodes.find((n) => n.id === l.target)!,
       }))
-
-    // 全局 graph 时过滤节点
-    const isGlobalGraph = graph.classList.contains("global-graph-container")
 
     // 计算每个节点的连接数
     const nodeLinkCount = new Map<string, number>()
