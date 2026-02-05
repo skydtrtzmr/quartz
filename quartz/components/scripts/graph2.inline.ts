@@ -124,6 +124,19 @@ if (!(window as any).graph2Initialized) {
     }
   }
 
+  // ============ 优化1: 预加载 fetchData ============
+  // 在脚本初始化时立即触发 fetchData，让数据在后台并行下载
+  // 避免首次 renderGraph 时才开始等待网络请求
+  if (!(window as any).graphFetchDataStarted) {
+    ; (window as any).graphFetchDataStarted = true
+    console.log("[Graph] 预加载 fetchData 开始")
+    fetchData.then(() => {
+      console.log("[Graph] 预加载 fetchData 完成")
+    }).catch(err => {
+      console.error("[Graph] 预加载 fetchData 失败:", err)
+    })
+  }
+
   async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     console.log("[renderGraph] start");
 
@@ -362,6 +375,21 @@ if (!(window as any).graph2Initialized) {
 
     const radius = (Math.min(width, height) / 2) * 0.8
     if (enableRadial) simulation.force("radial", forceRadial(radius).strength(0.2))
+
+    // 打印初始参数值
+    console.log(`[DEBUG] Simulation 初始参数 - alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()}`)
+
+    // ============ 优化2: 降低局部图谱的收敛标准 ============
+    // 局部图谱不需要等到完全收敛，适当降低标准可以显著减少计算时间
+    // 全局图谱保持默认值以确保最佳布局效果
+    if (!isGlobalGraph) {
+      simulation
+        .alphaMin(0.01)      // 默认 0.001，提高阈值让它更早停止（10倍）
+        .alphaDecay(0.05)    // 默认 0.0228，加快衰减速度（约2倍）
+      console.log(`[DEBUG] 局部图谱：使用快速收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`)
+    } else {
+      console.log(`[DEBUG] 全局图谱：使用默认收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`)
+    }
 
     // 监听 simulation 收敛完成
     simulation.on("end", () => {
