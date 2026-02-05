@@ -2,6 +2,81 @@ import micromorph from "micromorph"
 import { FullSlug, RelativeURL, getFullSlug, normalizeRelativeURLs } from "../../util/path"
 import { fetchCanonical } from "./util"
 
+// ============ 首屏加载守护 ============
+// 使用捕获阶段拦截，确保在所有其他事件处理之前
+
+// 创建预置的 toast 元素（避免每次动态创建影响性能）
+const initToast = document.createElement("div")
+initToast.id = "init-lock-toast"
+initToast.innerText = "系统初始化中，请稍候..."
+initToast.style.cssText = `
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--secondary);
+  color: var(--light);
+  padding: 10px 20px;
+  border-radius: 8px;
+  z-index: 9999;
+  font-size: 0.9em;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  opacity: 0;
+  visibility: hidden;
+`
+document.body.appendChild(initToast)
+
+// 显示/隐藏 toast（用 CSS 类切换，避免重复操作 DOM）
+let toastTimeout: ReturnType<typeof setTimeout> | null = null
+function showInitToast() {
+  if (toastTimeout) clearTimeout(toastTimeout)
+  initToast.style.visibility = "visible"
+  initToast.style.opacity = "1"
+  initToast.style.transform = "translateX(-50%) translateY(0)"
+
+  // 1.5秒后自动淡出
+  toastTimeout = setTimeout(() => {
+    initToast.style.opacity = "0"
+    initToast.style.transform = "translateX(-50%) translateY(20px)"
+    setTimeout(() => {
+      initToast.style.visibility = "hidden"
+    }, 300)
+  }, 1500)
+}
+
+// 捕获阶段拦截所有 click 事件
+window.addEventListener(
+  "click",
+  (e: MouseEvent) => {
+    // 如果首屏已加载完成，不做任何处理
+    if ((window as any).__firstScreenLoaded) return
+
+    // 检查是否是内部链接
+    const target = e.target as HTMLElement
+    if (target) {
+      const anchor = target.closest("a")
+      if (anchor && anchor.href) {
+        try {
+          const url = new URL(anchor.href)
+          if (url.origin === window.location.origin) {
+            // 这是一个内部链接，在初始化完成前禁止跳转
+            e.preventDefault()
+            e.stopImmediatePropagation()
+            console.warn("[Guard] 导航被阻止，首屏正在加载...")
+            showInitToast()
+          }
+        } catch {
+          // URL 解析失败，忽略
+        }
+      }
+    }
+  },
+  { capture: true } // 捕获阶段，在所有其他事件处理之前执行
+)
+
 // adapted from `micromorph`
 // https://github.com/natemoo-re/micromorph
 const NODE_TYPE_ELEMENT = 1
@@ -14,7 +89,7 @@ const isLocalUrl = (href: string) => {
     if (window.location.origin === url.origin) {
       return true
     }
-  } catch (e) {}
+  } catch (e) { }
   return false
 }
 

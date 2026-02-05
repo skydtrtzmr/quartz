@@ -25,6 +25,14 @@ if (!(window as any).graph2Initialized) {
   ; (window as any).graph2Initialized = true
   console.debug("[Graph] Initializing singleton graph script.")
 
+  // 首屏加载守护超时保护：5秒后强制解锁
+  setTimeout(() => {
+    if (!(window as any).__firstScreenLoaded) {
+      (window as any).__firstScreenLoaded = true
+      console.error("[Guard] 首屏加载超时（5秒），强制解锁导航")
+    }
+  }, 5000)
+
   type GraphicsInfo = {
     color: string
     gfx: Graphics
@@ -1341,6 +1349,15 @@ if (!(window as any).graph2Initialized) {
       cleanupGlobalGraphs()
     })
     console.log("[DEBUG] nav 事件处理完成，图谱初始化全部完成")
+
+    // 首屏加载完成：延迟500ms后解除导航守护
+    // 确保主线程从高峰负载中恢复
+    if (!(window as any).__firstScreenLoaded) {
+      setTimeout(() => {
+        (window as any).__firstScreenLoaded = true
+        console.log("%c[Guard] 首屏加载完成，导航已解锁", "color: #00ff00; font-weight: bold")
+      }, 500)
+    }
   })
   console.debug("[Graph] Singleton nav listener registered.")
 }
