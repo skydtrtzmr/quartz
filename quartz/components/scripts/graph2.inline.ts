@@ -147,14 +147,17 @@ if (!(window as any).graph2Initialized) {
       enableRadial,
     } = JSON.parse(graph.dataset["cfg"]!) as D3Config
 
+    console.log("[DEBUG] 开始等待 fetchData")
     const data: Map<SimpleSlug, ContentDetails> = new Map(
       Object.entries<ContentDetails>(await fetchData).map(([k, v]) => [
         simplifySlug(k as FullSlug),
         v,
       ]),
     )
+    console.log("[DEBUG] fetchData 完成，数据条目数:", data.size)
 
     // 加载虚拟节点索引
+    console.log("[DEBUG] 开始加载虚拟节点索引")
     let virtualNodeData: Map<SimpleSlug, { title: string; links: SimpleSlug[]; content: string }> =
       new Map()
     try {
@@ -167,8 +170,12 @@ if (!(window as any).graph2Initialized) {
             v as { title: string; links: SimpleSlug[]; content: string },
           )
         })
+        console.log("[DEBUG] 虚拟节点索引加载完成，条目数:", virtualNodeData.size)
+      } else {
+        console.log("[DEBUG] 虚拟节点索引不存在或加载失败")
       }
     } catch (e) {
+      console.log("[DEBUG] 虚拟节点索引加载异常:", e)
       // 虚拟节点索引文件不存在，忽略
     }
 
@@ -346,6 +353,7 @@ if (!(window as any).graph2Initialized) {
     const height = Math.max(graph.offsetHeight, 250)
 
     // we virtualize the simulation and use pixi to actually render it
+    console.log("[DEBUG] 开始初始化 D3 simulation")
     const simulation: Simulation<NodeData, LinkData> = forceSimulation<NodeData>(graphData.nodes)
       .force("charge", forceManyBody().strength(-100 * repelForce))
       .force("center", forceCenter().strength(centerForce))
@@ -354,6 +362,12 @@ if (!(window as any).graph2Initialized) {
 
     const radius = (Math.min(width, height) / 2) * 0.8
     if (enableRadial) simulation.force("radial", forceRadial(radius).strength(0.2))
+
+    // 监听 simulation 收敛完成
+    simulation.on("end", () => {
+      console.log("[DEBUG] D3 simulation 布局计算完成（已收敛）")
+    })
+    console.log("[DEBUG] D3 simulation 初始化完成，开始计算布局")
 
     // precompute style prop strings as pixi doesn't support css variables
     const cssVars = [
@@ -529,6 +543,7 @@ if (!(window as any).graph2Initialized) {
     tweens.forEach((tween) => tween.stop())
     tweens.clear()
 
+    console.log("[DEBUG] 开始初始化 Pixi Application")
     const app = new Application()
     await app.init({
       width,
@@ -541,6 +556,7 @@ if (!(window as any).graph2Initialized) {
       resolution: window.devicePixelRatio,
       eventMode: "static",
     })
+    console.log("[DEBUG] Pixi Application 初始化完成")
     graph.appendChild(app.canvas)
 
     const stage = app.stage
@@ -1106,8 +1122,10 @@ if (!(window as any).graph2Initialized) {
       animationId = requestAnimationFrame(animate)
     }
 
+    console.log("[DEBUG] 启动动画循环")
     animationId = requestAnimationFrame(animate)
     console.debug(`[Graph] Rendered graph for ${slug}. Containers: ${document.getElementsByClassName("graph-container").length}`)
+    console.log("[DEBUG] renderGraph 函数即将返回")
 
     return () => {
       console.debug(`[Graph] Tearing down graph for ${slug}`)
@@ -1170,6 +1188,7 @@ if (!(window as any).graph2Initialized) {
     }
 
     await renderLocalGraph()
+    console.log("[DEBUG] renderLocalGraph 执行完成，所有本地图谱已渲染")
     const handleThemeChange = () => {
       void renderLocalGraph()
     }
@@ -1230,6 +1249,7 @@ if (!(window as any).graph2Initialized) {
       cleanupLocalGraphs()
       cleanupGlobalGraphs()
     })
+    console.log("[DEBUG] nav 事件处理完成，图谱初始化全部完成")
   })
   console.debug("[Graph] Singleton nav listener registered.")
 }
