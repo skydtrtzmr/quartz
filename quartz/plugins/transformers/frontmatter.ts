@@ -52,56 +52,6 @@ function getAliasSlugs(aliases: string[]): FullSlug[] {
   return res
 }
 
-// 提取字符串中的wikilink格式链接 [[link]]
-function extractWikiLinks(value: string): string[] {
-  const wikilinkRegex = /\[\[([^\]]+)\]\]/g
-  const links: string[] = []
-  let match
-  
-  while ((match = wikilinkRegex.exec(value)) !== null) {
-    // 处理带别名的链接格式 [[path/to/file|title]]
-    const linkPart = match[1]
-    const pipeIndex = linkPart.indexOf('|')
-    const actualLink = pipeIndex !== -1 ? linkPart.substring(0, pipeIndex) : linkPart
-    links.push(actualLink)
-  }
-  
-  return links
-}
-
-// 处理元数据中的链接
-function processFrontmatterLinks(data: { [key: string]: unknown }): string[] {
-  const links: string[] = []
-  
-  for (const key in data) {
-    const value = data[key]
-    
-    if (typeof value === 'string') {
-      // 提取wikilink格式的链接
-      const wikiLinks = extractWikiLinks(value)
-      wikiLinks.forEach(link => {
-        // 将链接转换为标准格式
-        const isMd = getFileExtension(link) === "md"
-        const mockFp = isMd ? link : link + ".md"
-        links.push(mockFp)
-      })
-    } else if (Array.isArray(value)) {
-      // 如果是数组，递归处理每个元素
-      value.forEach(item => {
-        if (typeof item === 'string') {
-          const wikiLinks = extractWikiLinks(item)
-          wikiLinks.forEach(link => {
-            const isMd = getFileExtension(link) === "md"
-            const mockFp = isMd ? link : link + ".md"
-            links.push(mockFp)
-          })
-        }
-      })
-    }
-  }
-  
-  return links
-}
 
 export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts) => {
   const opts = { ...defaultOptions, ...userOpts }
@@ -170,11 +120,6 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
 
             if (socialImage) data.socialImage = socialImage
 
-            // 处理元数据中的链接
-            const frontmatterLinks = processFrontmatterLinks(data)
-            if (frontmatterLinks.length > 0) {
-              file.data.frontmatterLinks = frontmatterLinks
-            }
 
             // Remove duplicate slugs
             const uniqueSlugs = [...new Set(allSlugs)]
@@ -195,21 +140,20 @@ declare module "vfile" {
     frontmatter: { [key: string]: unknown } & {
       title: string
     } & Partial<{
-        tags: string[]
-        aliases: string[]
-        modified: string
-        created: string
-        published: string
-        description: string
-        socialDescription: string
-        publish: boolean | string
-        draft: boolean | string
-        lang: string
-        enableToc: string
-        cssclasses: string[]
-        socialImage: string
-        comments: boolean | string
-      }>
-    frontmatterLinks?: string[]
+      tags: string[]
+      aliases: string[]
+      modified: string
+      created: string
+      published: string
+      description: string
+      socialDescription: string
+      publish: boolean | string
+      draft: boolean | string
+      lang: string
+      enableToc: string
+      cssclasses: string[]
+      socialImage: string
+      comments: boolean | string
+    }>
   }
 }

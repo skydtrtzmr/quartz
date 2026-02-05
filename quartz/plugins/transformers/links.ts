@@ -8,12 +8,148 @@ import {
   simplifySlug,
   splitAnchor,
   transformLink,
-  slugifyFilePath,
 } from "../../util/path"
 import path from "path"
 import { visit } from "unist-util-visit"
 import isAbsoluteUrl from "is-absolute-url"
 import { Root } from "hast"
+import { wikilinkRegex } from "./ofm"
+
+// Type for processed frontmatter values
+export type ProcessedFrontmatterValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { text: string; href: string }
+  | ProcessedFrontmatterValue[]
+  | { [key: string]: ProcessedFrontmatterValue }
+
+// Process a single frontmatter value, converting wikilinks to {text, href} objects
+function processFrontmatterValue(
+  value: unknown,
+  slug: FullSlug,
+  transformOptions: TransformOptions,
+): ProcessedFrontmatterValue {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => processFrontmatterValue(item, slug, transformOptions))
+  }
+
+  if (typeof value === "string") {
+    // Reset regex lastIndex since it has global flag
+    wikilinkRegex.lastIndex = 0
+    const match = wikilinkRegex.exec(value)
+    // Check if the entire string is a wikilink (not just contains one)
+    if (match && match[0] === value && !value.startsWith("!")) {
+      // ofm.ts wikilinkRegex capture groups:
+      // [1] = file path (e.g., "MAPWD232")
+      // [2] = anchor/heading with # (e.g., "#section")
+      // [3] = alias with | or \| (e.g., "|display text" or "\|display text")
+      const rawFp = match[1]?.trim() ?? ""
+      const rawHeader = match[2]?.trim() ?? ""
+      const rawAlias = match[3]
+
+      const fp = rawFp
+      const anchor = rawHeader
+      // Remove leading | or \| from alias
+      const alias = rawAlias?.replace(/^\\?\|/, "").trim()
+
+      const actualLink = fp + anchor
+      const displayText = alias ?? fp
+
+      // Transform the link using the same logic as content links
+      const dest = transformLink(slug, actualLink, transformOptions)
+
+      return {
+        text: displayText,
+        href: dest,
+      }
+    }
+    return value
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return value
+  }
+
+  if (typeof value === "object") {
+    const result: { [key: string]: ProcessedFrontmatterValue } = {}
+    for (const key in value as Record<string, unknown>) {
+      result[key] = processFrontmatterValue(
+        (value as Record<string, unknown>)[key],
+        slug,
+        transformOptions,
+      )
+    }
+    return result
+  }
+
+  return String(value)
+}
+
+// Process all frontmatter fields
+function processFrontmatterFields(
+  frontmatter: Record<string, unknown>,
+  slug: FullSlug,
+  transformOptions: TransformOptions,
+  outgoing: Set<SimpleSlug>,
+): Record<string, ProcessedFrontmatterValue> {
+  const result: Record<string, ProcessedFrontmatterValue> = {}
+
+  for (const key in frontmatter) {
+    const value = frontmatter[key]
+    result[key] = processFrontmatterValue(value, slug, transformOptions)
+
+    // Collect outgoing links from processed values
+    collectOutgoingLinks(result[key], slug, outgoing)
+  }
+
+  return result
+}
+
+// Recursively collect outgoing links from processed frontmatter values
+function collectOutgoingLinks(
+  value: ProcessedFrontmatterValue,
+  curSlug: FullSlug,
+  outgoing: Set<SimpleSlug>,
+): void {
+  if (value === null || value === undefined) return
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectOutgoingLinks(item, curSlug, outgoing))
+    return
+  }
+
+  if (typeof value === "object" && "text" in value && "href" in value && typeof value.href === "string") {
+    // This is a processed link
+    try {
+      const dest = value.href
+      const curSlugSimple = simplifySlug(curSlug)
+      const url = new URL(dest, "https://base.com/" + stripSlashes(curSlugSimple, true))
+      const canonicalDest = url.pathname
+      let [destCanonical, _destAnchor] = splitAnchor(canonicalDest)
+      if (destCanonical.endsWith("/")) {
+        destCanonical += "index"
+      }
+      const full = decodeURIComponent(stripSlashes(destCanonical, true)) as FullSlug
+      const simple = simplifySlug(full)
+      outgoing.add(simple)
+    } catch (e) {
+      // Ignore invalid URLs
+    }
+    return
+  }
+
+  if (typeof value === "object") {
+    for (const key in value) {
+      collectOutgoingLinks((value as Record<string, ProcessedFrontmatterValue>)[key], curSlug, outgoing)
+    }
+  }
+}
 
 interface Options {
   /** How to resolve Markdown paths */
@@ -49,17 +185,14 @@ export const CrawlLinks: QuartzTransformerPlugin<Partial<Options>> = (userOpts) 
               allSlugs: ctx.allSlugs,
             }
 
-            // 处理frontmatter中的链接
-            if (file.data.frontmatterLinks) {
-              for (const link of file.data.frontmatterLinks) {
-                try {
-                  const fullSlug = slugifyFilePath(link as any)
-                  const simpleSlug = simplifySlug(fullSlug)
-                  outgoing.add(simpleSlug)
-                } catch (e) {
-                  console.warn(`Failed to process frontmatter link: ${link}`, e)
-                }
-              }
+            // 处理frontmatter中的链接，生成 processedFrontmatter
+            if (file.data.frontmatter) {
+              file.data.processedFrontmatter = processFrontmatterFields(
+                file.data.frontmatter as Record<string, unknown>,
+                file.data.slug!,
+                transformOptions,
+                outgoing,
+              )
             }
 
             visit(tree, "element", (node, _index, _parent) => {
@@ -184,5 +317,6 @@ export const CrawlLinks: QuartzTransformerPlugin<Partial<Options>> = (userOpts) 
 declare module "vfile" {
   interface DataMap {
     links: SimpleSlug[]
+    processedFrontmatter?: Record<string, ProcessedFrontmatterValue>
   }
 }

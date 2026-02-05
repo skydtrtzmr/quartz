@@ -1,9 +1,6 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
-import { resolveRelative, slugifyFilePath } from "../util/path"
-import { FullSlug, FilePath } from "../util/path"
 import { i18n } from "../i18n"
-import style from "./styles/contentMeta.scss"
 
 // 定义内置元数据字段列表，这里的字段都不会显示
 const builtinFields = [
@@ -28,8 +25,23 @@ const builtinFields = [
 // 定义需要以标签形式渲染的字段（紧凑型列表）
 const tagStyleFields = ['aliases', 'alias', 'tags', 'tag']
 
+// 类型守卫：检查是否为链接对象
+function isLinkObject(value: unknown): value is { text: string; href: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'text' in value &&
+    'href' in value &&
+    typeof (value as any).text === 'string' &&
+    typeof (value as any).href === 'string'
+  )
+}
+
 const FrontmatterMeta: QuartzComponent = ({ fileData, displayClass, cfg }: QuartzComponentProps) => {
+  // 使用 processedFrontmatter（已处理链接），如果不存在则回退到原始 frontmatter
+  const processedFrontmatter = fileData.processedFrontmatter
   const frontmatter = fileData.frontmatter
+
   if (!frontmatter) return null
 
   // 从i18n读取字段名翻译
@@ -47,7 +59,7 @@ const FrontmatterMeta: QuartzComponent = ({ fileData, displayClass, cfg }: Quart
   }
 
   // 处理值，支持链接渲染
-  const renderValue = (value: any, fieldKey: string): any => {
+  const renderValue = (value: unknown, fieldKey: string): any => {
     if (Array.isArray(value)) {
       // 检查是否需要以标签形式渲染
       if (tagStyleFields.includes(fieldKey)) {
@@ -70,39 +82,16 @@ const FrontmatterMeta: QuartzComponent = ({ fileData, displayClass, cfg }: Quart
           </ul>
         )
       }
+    } else if (isLinkObject(value)) {
+      // 这是一个已处理的内部链接对象 {text, href}
+      return (
+        <a href={value.href} class="internal">
+          {value.text}
+        </a>
+      )
     } else if (typeof value === 'string') {
-      // 检查是否为内部链接格式 [[link]]
-      const wikilinkRegex = /\[\[([^\]]+)\]\]/g
-      if (wikilinkRegex.test(value)) {
-        wikilinkRegex.lastIndex = 0 // 重置正则表达式索引
-        const parts = value.split(wikilinkRegex)
-        return (
-          <>
-            {parts.map((part, index) => {
-              if (index % 2 === 1) {
-                // 这是链接内容
-                // 处理带别名的链接格式 [[path/to/file|title]]
-                const pipeIndex = part.indexOf('|')
-                const actualLink = pipeIndex !== -1 ? part.substring(0, pipeIndex) : part
-                const linkText = pipeIndex !== -1 ? part.substring(pipeIndex + 1) : part
-
-                // 使用 slugifyFilePath 来正确处理文件名
-                const slugified = slugifyFilePath(`${actualLink}.md` as FilePath)
-                const linkDest = resolveRelative(fileData.slug!, slugified)
-                return (
-                  <a href={linkDest} class="internal">
-                    {linkText}
-                  </a>
-                )
-              } else {
-                // 这是普通文本
-                return part
-              }
-            })}
-          </>
-        )
-      } else if (value.startsWith("http://") || value.startsWith("https://")) {
-        // 外部链接
+      // 检查是否为外部链接
+      if (value.startsWith("http://") || value.startsWith("https://")) {
         return (
           <a href={value} class="external" target="_blank" rel="noopener noreferrer">
             {value}
@@ -110,6 +99,8 @@ const FrontmatterMeta: QuartzComponent = ({ fileData, displayClass, cfg }: Quart
         )
       }
       return value
+    } else if (value === null || value === undefined) {
+      return ''
     }
     return String(value)
   }
@@ -120,7 +111,8 @@ const FrontmatterMeta: QuartzComponent = ({ fileData, displayClass, cfg }: Quart
       <table class="custom-meta-table">
         <tbody>
           {customFields.map(field => {
-            const value = frontmatter[field]
+            // 优先使用 processedFrontmatter 中的值（已转换链接）
+            const value = processedFrontmatter?.[field] ?? frontmatter[field]
             // 翻译字段名（如果有翻译则使用翻译，否则使用原始名称）
             const displayName = fieldNameMap[field] || field.replace(/_/g, ' ')
             // 渲染所有字段，包括空值
