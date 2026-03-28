@@ -354,7 +354,7 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
   }
 
   // 格式化搜索结果用于显示，支持混合高亮
-  const formatForDisplay = (searchInfo: { text?: string, tags?: string[], yamlQueries?: any[] }, id: number) => {
+  const formatForDisplay = (searchInfo: { text?: string, tags?: string[], yamlQueries?: YamlQuery[] }, id: number) => {
     const slug = idDataMap[id]
     const doc = data[slug]
     
@@ -597,64 +597,95 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
     return parts.filter(p => p.length > 0)
   }
 
-  // 解析混合搜索：分离YAML搜索、标签搜索和普通文本
-  // 示例："@author:张三 #AI 机器学习" → { yamlQueries: [{key:'author',value:'张三'}], tags: ['AI'], text: '机器学习' }
-  function parseSearchQuery(searchTerm: string): {
-    yamlQueries: Array<{ type: 'key-value' | 'value-only' | 'key-only', key?: string, value?: string }>,
-    tags: string[],
+  type YamlQuery = { type: 'key-value' | 'value-only' | 'key-only', key?: string, value?: string }
+
+  interface ParsedSearchQuery {
+    yamlQueries: YamlQuery[]
+    tags: string[]
     text: string
-  } {
-    const yamlQueries: Array<{ type: 'key-value' | 'value-only' | 'key-only', key?: string, value?: string }> = []
+    excludeYamlQueries: YamlQuery[]
+    excludeTags: string[]
+    excludeTexts: string[]
+  }
+
+  // 解析混合搜索：分离YAML搜索、标签搜索、普通文本，以及各类排除条件
+  // 支持 `-` 前缀排除：-#tag、-@key:value、-文本
+  // 示例："@author:张三 #AI -#draft -废弃 机器学习" →
+  //   { yamlQueries: [{key:'author',value:'张三'}], tags: ['AI'], text: '机器学习',
+  //     excludeTags: ['draft'], excludeTexts: ['废弃'], excludeYamlQueries: [] }
+  function parseSearchQuery(searchTerm: string): ParsedSearchQuery {
+    const yamlQueries: YamlQuery[] = []
     const tags: string[] = []
     const textParts: string[] = []
+    const excludeYamlQueries: YamlQuery[] = []
+    const excludeTags: string[] = []
+    const excludeTexts: string[] = []
     
     // 按空格分割
     const tokens = searchTerm.trim().split(/\s+/)
     
     for (const token of tokens) {
-      if (token.startsWith('@')) {
+      // 检测是否为排除条件
+      const isExclude = token.startsWith('-') && token.length > 1
+      const actualToken = isExclude ? token.substring(1) : token
+
+      if (actualToken.startsWith('@')) {
         // YAML搜索
-        const yamlTerm = token.substring(1)
+        const yamlTerm = actualToken.substring(1)
         const colonIndex = yamlTerm.indexOf(':')
+        const targetList = isExclude ? excludeYamlQueries : yamlQueries
         
         if (colonIndex === -1) {
           // @key - 搜索包含该键的文档
           const key = yamlTerm.trim()
-          if (key) yamlQueries.push({ type: 'key-only', key })
+          if (key) targetList.push({ type: 'key-only', key })
         } else {
           const key = yamlTerm.substring(0, colonIndex).trim()
           const value = yamlTerm.substring(colonIndex + 1).trim()
           
           if (!key && value) {
             // @:value - 搜索所有字段的值
-            yamlQueries.push({ type: 'value-only', value })
+            targetList.push({ type: 'value-only', value })
           } else if (key && !value) {
             // @key: - 搜索包含该键的文档
-            yamlQueries.push({ type: 'key-only', key })
+            targetList.push({ type: 'key-only', key })
           } else if (key && value) {
             // @key:value - 搜索指定键值对
-            yamlQueries.push({ type: 'key-value', key, value })
+            targetList.push({ type: 'key-value', key, value })
           }
         }
-      } else if (token.startsWith('#')) {
+      } else if (actualToken.startsWith('#')) {
         // 标签搜索
-        const tag = token.substring(1).trim()
-        if (tag) tags.push(tag)
+        const tag = actualToken.substring(1).trim()
+        if (tag) {
+          if (isExclude) {
+            excludeTags.push(tag)
+          } else {
+            tags.push(tag)
+          }
+        }
       } else {
         // 普通文本
-        textParts.push(token)
+        if (isExclude) {
+          excludeTexts.push(actualToken)
+        } else {
+          textParts.push(token)
+        }
       }
     }
     
     return {
       yamlQueries,
       tags,
-      text: textParts.join(' ')
+      text: textParts.join(' '),
+      excludeYamlQueries,
+      excludeTags,
+      excludeTexts,
     }
   }
 
   // 模糊匹配 YAML 字段 - 支持三种模式
-  function matchYamlField(doc: any, yamlSearch: { type: 'key-value' | 'value-only' | 'key-only', key?: string; value?: string }): boolean {
+  function matchYamlField(doc: any, yamlSearch: YamlQuery): boolean {
     if (!doc.frontmatter) return false
     
     // 遍历所有 frontmatter 字段
@@ -704,7 +735,7 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
   }
   
   // 检查文档是否匹配所有YAML查询条件
-  function matchAllYamlQueries(doc: any, yamlQueries: Array<{ type: 'key-value' | 'value-only' | 'key-only', key?: string, value?: string }>): boolean {
+  function matchAllYamlQueries(doc: any, yamlQueries: YamlQuery[]): boolean {
     return yamlQueries.every(query => matchYamlField(doc, query))
   }
 
@@ -721,45 +752,26 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
     const hasYaml = parsed.yamlQueries.length > 0
     const hasTags = parsed.tags.length > 0
     const hasText = parsed.text.trim().length > 0
-      
-    // 如果只有标签搜索，使用原有的tags搜索逻辑
-    if (hasTags && !hasYaml && !hasText && parsed.tags.length === 1) {
+    const hasExcludeTags = parsed.excludeTags.length > 0
+    const hasExcludeYaml = parsed.excludeYamlQueries.length > 0
+    const hasExcludeText = parsed.excludeTexts.length > 0
+
+    // 确定搜索类型（用于 UI 显示）
+    if (hasYaml && !hasText && !hasTags) {
+      searchType = "yaml"
+    } else if (hasTags && !hasText && !hasYaml) {
       searchType = "tags"
-      const tagTerm = parsed.tags[0]
-      const searchResults = await index.searchAsync({
-        query: tagTerm,
-        limit: 10000,
-        index: ["tags"],
-      })
-        
-      const getByField = (field: string): number[] => {
-        const results = searchResults.filter((x) => x.field === field)
-        return results.length === 0 ? [] : ([...results[0].result] as number[])
-      }
-        
-      const allIds: Set<number> = new Set([...getByField("tags")])
-      const requiredTerms = extractRequiredTerms(tagTerm)
-      const filteredIds = [...allIds].filter((id) => {
-        const slug = idDataMap[id]
-        const doc = data[slug]
-        const combinedText = (doc.tags ?? []).join(" ")
-        return matchesAllTerms(combinedText, requiredTerms)
-      })
-        
-      allSearchResults = filteredIds.map((id) => formatForDisplay({ tags: [tagTerm] }, id))
-      await displayResults(allSearchResults)
-      return
+    } else {
+      searchType = "basic"
     }
-      
-    // 混合搜索逻辑
+
+    // 统一混合搜索逻辑
     let candidateIds: Set<number> = new Set()
       
     // 第一步：如果有文本搜索，使用FlexSearch获取候选结果
     if (hasText) {
-      searchType = "basic"
       const searchResults = await index.searchAsync({
         query: parsed.text,
-        // 这里的limit可能需要根据实际情况调整
         limit: 10000,
         index: ["title", "content"],
       })
@@ -790,9 +802,8 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
       }
     }
       
-    // 第二步：过滤YAML条件
+    // 第二步：过滤YAML条件（include）
     if (hasYaml) {
-      searchType = hasText ? "basic" : "yaml"
       candidateIds = new Set([...candidateIds].filter((id) => {
         const slug = idDataMap[id]
         const doc = data[slug]
@@ -800,7 +811,7 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
       }))
     }
       
-    // 第三步：过滤标签条件
+    // 第三步：过滤标签条件（include）
     if (hasTags) {
       candidateIds = new Set([...candidateIds].filter((id) => {
         const slug = idDataMap[id]
@@ -812,8 +823,43 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
         )
       }))
     }
+
+    // 第四步：排除过滤
+    if (hasExcludeText || hasExcludeTags || hasExcludeYaml) {
+      candidateIds = new Set([...candidateIds].filter((id) => {
+        const slug = idDataMap[id]
+        const doc = data[slug]
+
+        // 排除文本匹配：任一排除词出现在标题或正文中即排除
+        if (hasExcludeText) {
+          const combinedText = `${doc.title ?? ""} ${doc.content ?? ""}`.toLowerCase()
+          if (parsed.excludeTexts.some(term => combinedText.includes(term.toLowerCase()))) {
+            return false
+          }
+        }
+
+        // 排除标签匹配：任一排除标签匹配即排除
+        if (hasExcludeTags) {
+          const docTags = (doc.tags ?? []).map((t: string) => t.toLowerCase())
+          if (parsed.excludeTags.some(et =>
+            docTags.some((dt: string) => dt.includes(et.toLowerCase()))
+          )) {
+            return false
+          }
+        }
+
+        // 排除 YAML 匹配：任一排除 YAML 查询匹配即排除
+        if (hasExcludeYaml) {
+          if (parsed.excludeYamlQueries.some(q => matchYamlField(doc, q))) {
+            return false
+          }
+        }
+
+        return true // 保留
+      }))
+    }
       
-    // 显示结果
+    // 显示结果（只对 include 条件生成高亮信息，排除条件不高亮）
     const searchInfo = {
       text: hasText ? parsed.text : undefined,
       tags: hasTags ? parsed.tags : undefined,
