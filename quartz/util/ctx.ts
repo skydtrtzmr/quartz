@@ -8,6 +8,7 @@ export interface Argv {
   directory: string
   verbose: boolean
   output: string
+  settings?: string  // [M] 新增配置文件夹路径字段
   serve: boolean
   watch: boolean
   port: number

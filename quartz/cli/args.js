@@ -60,6 +60,11 @@ export const SyncArgv = {
 
 export const BuildArgv = {
   ...CommonArgv,
+  settings: {  
+    string: true,  
+    alias: ["s"],  
+    describe: "settings folder path, for quartz.config.ts and quartz.layout.ts",  
+  },  
   output: {
     string: true,
     alias: ["o"],
