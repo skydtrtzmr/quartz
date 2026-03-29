@@ -57,6 +57,12 @@ let flatRenderEnd: number = 0 // 当前渲染结束索引（步骤 4 使用）
 // 全局引用（用于 refreshFlatExplorer）
 let currentTrie: FileTrieNode | null = null // 当前文件树
 let currentExplorerUl: Element | null = null // 当前 Explorer UL 元素
+let basePath: string = "" // 从 data-basepath 获取的子路径（如 "xm"）
+
+// 生成带 basePath 的链接
+function getHref(slug: string): string {
+  return basePath ? `/${basePath}/${slug}` : `/${slug}`
+}
 
 /**
  * 切换整个 Explorer 面板的展开/折叠状态
@@ -137,9 +143,8 @@ function createFileNode(
   const clone = template.content.cloneNode(true) as DocumentFragment
   const li = clone.querySelector("li") as HTMLLIElement
   const a = li.querySelector("a") as HTMLAnchorElement
-  // a.href = resolveRelative(currentSlug, node.slug)
-  // [M] 改为从根目录开始计算路径
-  a.href = `/${node.slug}`
+  // 使用 basePath 生成链接（支持子路径部署）
+  a.href = getHref(node.slug)
   a.dataset.for = node.slug
   a.textContent = node.displayName
 
@@ -191,9 +196,8 @@ function createSimpleFolderNode(
   if (opts.folderClickBehavior === "link") {
     const button = titleContainer.querySelector(".folder3-button") as HTMLElement
     const a = document.createElement("a")
-    // a.href = resolveRelative(currentSlug, folderPath)
-    // [M] 改为从根目录开始计算路径
-    a.href = `/${folderPath}`
+    // 使用 basePath 生成链接（支持子路径部署）
+    a.href = getHref(folderPath)
     a.dataset.for = folderPath
     a.textContent = node.displayName
 
@@ -1064,6 +1068,10 @@ async function setupExplorer3(currentSlug: FullSlug) {
   const allExplorers = document.querySelectorAll("div.explorer3") as NodeListOf<HTMLElement>
 
   for (const explorer of allExplorers) {
+    // 读取 basePath（支持子路径部署）
+    basePath = explorer.dataset.basepath || ""
+    console.log("[setupExplorer3] basePath:", basePath)
+
     const dataFns = JSON.parse(explorer.dataset.dataFns || "{}")
     const opts: ParsedOptions = {
       folderClickBehavior: (explorer.dataset.behavior || "collapse") as "collapse" | "link",

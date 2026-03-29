@@ -5,6 +5,17 @@ import style from "./styles/graph.scss"
 import { i18n } from "../i18n"
 import { classNames } from "../util/lang"
 
+function getBasePath(baseUrl: string | undefined): string {
+  if (!baseUrl) return ""
+  try {
+    const url = new URL(`https://${baseUrl}`)
+    return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
+  } catch {
+    // 如果不是完整 URL，直接返回（去掉开头的 /）
+    return baseUrl.replace(/^\//, "").replace(/\/.*$/, "")
+  }
+}
+
 export interface D3Config {
   drag: boolean
   zoom: boolean
@@ -63,11 +74,19 @@ export default ((opts?: Partial<GraphOptions>) => {
   const Graph: QuartzComponent = ({ displayClass, cfg }: QuartzComponentProps) => {
     const localGraph = { ...defaultOptions.localGraph, ...opts?.localGraph }
     const globalGraph = { ...defaultOptions.globalGraph, ...opts?.globalGraph }
+    // [M] 跟Explorer2一样，传basePath给inline用。
+    const basePath = getBasePath(cfg.baseUrl)
+    console.log("Graph base:", basePath)
+
     return (
       <div class={classNames(displayClass, "graph")}>
         <h3>{i18n(cfg.locale).components.graph.title}</h3>
         <div class="graph-outer">
-          <div class="graph-container" data-cfg={JSON.stringify(localGraph)}></div>
+          <div
+            class="graph-container"
+            data-basepath={basePath}
+            data-cfg={JSON.stringify(localGraph)}
+          ></div>
           <button class="global-graph-icon" aria-label="Global Graph">
             <svg
               version="1.1"
@@ -96,7 +115,11 @@ export default ((opts?: Partial<GraphOptions>) => {
           </button>
         </div>
         <div class="global-graph-outer">
-          <div class="global-graph-container" data-cfg={JSON.stringify(globalGraph)}></div>
+          <div
+            class="global-graph-container"
+            data-basepath={basePath}
+            data-cfg={JSON.stringify(globalGraph)}
+          ></div>
         </div>
       </div>
     )

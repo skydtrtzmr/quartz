@@ -24,3 +24,9 @@ npm install
 执行`server/quartz-service.exe`来运行服务。
 
 建议先启动==命令行==，在命令行窗口中执行该exe服务。因为直接双击点开的话，可能会因为鼠标点击触发交互模式导致窗口暂停活动。
+
+直接构建：
+
+```
+npx quartz build -d E:\ProgramProjects\VScode_projects\quartz-fullstack\input\xm -o E:\ProgramProjects\VScode_projects\quartz-fullstack\output\xm
+```

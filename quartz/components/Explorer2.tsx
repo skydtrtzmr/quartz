@@ -9,6 +9,18 @@ import { FileTrieNode } from "../util/fileTrie"
 import OverflowListFactory from "./OverflowList"
 import { concatenateResources } from "../util/resources"
 
+// 从 baseUrl 提取子路径（如 "127.0.0.1:8767/xm" -> "xm"）
+function getBasePath(baseUrl: string | undefined): string {
+  if (!baseUrl) return ""
+  try {
+    const url = new URL(`https://${baseUrl}`)
+    return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
+  } catch {
+    // 如果不是完整 URL，直接返回（去掉开头的 /）
+    return baseUrl.replace(/^\//, "").replace(/\/.*$/, "")
+  }
+}
+
 type OrderEntries = "sort" | "filter" | "map"
 
 export interface Options {
@@ -80,6 +92,7 @@ export default ((userOpts?: Partial<Options>) => {
 
     const Explorer3: QuartzComponent = ({ cfg, displayClass }: QuartzComponentProps) => {
         const id = `explorer3-${numExplorers++}`
+        const basePath = getBasePath(cfg.baseUrl)
 
         return (
             <div
@@ -93,6 +106,7 @@ export default ((userOpts?: Partial<Options>) => {
                 data-virtualscrollthreshold={opts.virtualScrollThreshold}
                 data-virtualscrollwindowsize={opts.virtualScrollWindowSize}
                 data-stickyheaders={opts.stickyHeaders}
+                data-basepath={basePath}
                 data-data-fns={JSON.stringify({
                     order: opts.order,
                     sortFn: opts.sortFn.toString(),

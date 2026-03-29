@@ -20,15 +20,26 @@ import { registerEscapeHandler, removeAllChildren } from "./util"
 import { FullSlug, SimpleSlug, getFullSlug, resolveRelative, simplifySlug } from "../../util/path"
 import { D3Config } from "../Graph"
 
+let basePath: string = "" // 从 data-basepath 获取的子路径（如 "xm"）
+
+// TODO 这里计算边缘节点的方法，以及边缘节点的命名，都得改。
+
 // 使用全局标识符，并在 IIFE 中使用块作用域防止多次执行
 if (!(window as any).graph2Initialized) {
-  ; (window as any).graph2Initialized = true
+  ;(window as any).graph2Initialized = true
   console.debug("[Graph] Initializing singleton graph script.")
+
+  // 生成带 basePath 的链接
+  function getHref(slug: string): string {
+    console.log('basePath:', basePath);
+    
+    return basePath ? `/${basePath}/${slug}` : `/${slug}`
+  }
 
   // 首屏加载守护超时保护：5秒后强制解锁
   setTimeout(() => {
     if (!(window as any).__firstScreenLoaded) {
-      (window as any).__firstScreenLoaded = true
+      ;(window as any).__firstScreenLoaded = true
       console.error("[Guard] 首屏加载超时（5秒），强制解锁导航")
     }
   }, 5000)
@@ -136,17 +147,19 @@ if (!(window as any).graph2Initialized) {
   // 在脚本初始化时立即触发 fetchData，让数据在后台并行下载
   // 避免首次 renderGraph 时才开始等待网络请求
   if (!(window as any).graphFetchDataStarted) {
-    ; (window as any).graphFetchDataStarted = true
+    ;(window as any).graphFetchDataStarted = true
     console.log("[Graph] 预加载 fetchData 开始")
-    fetchData.then(() => {
-      console.log("[Graph] 预加载 fetchData 完成")
-    }).catch(err => {
-      console.error("[Graph] 预加载 fetchData 失败:", err)
-    })
+    fetchData
+      .then(() => {
+        console.log("[Graph] 预加载 fetchData 完成")
+      })
+      .catch((err) => {
+        console.error("[Graph] 预加载 fetchData 失败:", err)
+      })
   }
 
   async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
-    console.log("[renderGraph] start");
+    console.log("[renderGraph] start")
 
     const slug = simplifySlug(fullSlug)
     const visited = getVisited()
@@ -168,6 +181,13 @@ if (!(window as any).graph2Initialized) {
       enableRadial,
     } = JSON.parse(graph.dataset["cfg"]!) as D3Config
 
+    console.log('dataset:', graph.dataset);
+    
+
+    basePath = graph.dataset.basepath || ""
+    console.log('get basePath:', basePath);
+    
+
     console.log("[DEBUG] 开始等待 fetchData")
     const data: Map<SimpleSlug, ContentDetails> = new Map(
       Object.entries<ContentDetails>(await fetchData).map(([k, v]) => [
@@ -182,7 +202,7 @@ if (!(window as any).graph2Initialized) {
     let virtualNodeData: Map<SimpleSlug, { title: string; links: SimpleSlug[]; content: string }> =
       new Map()
     try {
-      const virtualIndexResponse = await fetch("/static/virtualNodeIndex.json")
+      const virtualIndexResponse = await fetch(getHref("static/virtualNodeIndex.json"))
       if (virtualIndexResponse.ok) {
         const virtualIndex = await virtualIndexResponse.json()
         Object.entries(virtualIndex).forEach(([k, v]) => {
@@ -281,7 +301,9 @@ if (!(window as any).graph2Initialized) {
       }
 
       const endTime = performance.now()
-      console.log(`[DEBUG] BFS 邻域计算完成 - 耗时: ${(endTime - startTime).toFixed(2)}ms, 邻域节点数: ${neighbourhood.size}, 链接数: ${links.length}`)
+      console.log(
+        `[DEBUG] BFS 邻域计算完成 - 耗时: ${(endTime - startTime).toFixed(2)}ms, 邻域节点数: ${neighbourhood.size}, 链接数: ${links.length}`,
+      )
     } else {
       // 全局图谱：保持原有逻辑，构建完整链接图
       console.log("[DEBUG] 全局图谱：使用完整链接图构建")
@@ -324,7 +346,9 @@ if (!(window as any).graph2Initialized) {
       virtualNodeData.forEach((_, virtualSlug) => neighbourhood.add(virtualSlug))
 
       const endTime = performance.now()
-      console.log(`[DEBUG] 全局链接图构建完成 - 耗时: ${(endTime - startTime).toFixed(2)}ms, 节点数: ${neighbourhood.size}, 链接数: ${links.length}`)
+      console.log(
+        `[DEBUG] 全局链接图构建完成 - 耗时: ${(endTime - startTime).toFixed(2)}ms, 节点数: ${neighbourhood.size}, 链接数: ${links.length}`,
+      )
     }
 
     // 用于动画的 tween 集合
@@ -419,9 +443,16 @@ if (!(window as any).graph2Initialized) {
     let graphData: { nodes: NodeData[]; links: LinkData[] }
     if (isGlobalGraph) {
       // 全局图谱：初始只加载核心节点
+      // graphData = {
+      //   nodes: [...coreNodes],
+      //   links: [...coreLinks],
+      // }
+      // [M] 暂时改成加装所有节点
       graphData = {
-        nodes: [...coreNodes],
-        links: [...coreLinks],
+        // nodes: nonOrphanNodes,
+        nodes: allNodes,
+        // links: nonOrphanLinks,
+        links: allLinks,
       }
     } else {
       // 局部 graph：加载所有非孤儿节点
@@ -448,18 +479,24 @@ if (!(window as any).graph2Initialized) {
     if (enableRadial) simulation.force("radial", forceRadial(radius).strength(0.2))
 
     // 打印初始参数值
-    console.log(`[DEBUG] Simulation 初始参数 - alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()}`)
+    console.log(
+      `[DEBUG] Simulation 初始参数 - alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()}`,
+    )
 
     // ============ 优化2: 降低局部图谱的收敛标准 ============
     // 局部图谱不需要等到完全收敛，适当降低标准可以显著减少计算时间
     // 全局图谱保持默认值以确保最佳布局效果
     if (!isGlobalGraph) {
       simulation
-        .alphaMin(0.01)      // 默认 0.001，提高阈值让它更早停止（10倍）
-        .alphaDecay(0.05)    // 默认 0.0228，加快衰减速度（约2倍）
-      console.log(`[DEBUG] 局部图谱：使用快速收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`)
+        .alphaMin(0.01) // 默认 0.001，提高阈值让它更早停止（10倍）
+        .alphaDecay(0.05) // 默认 0.0228，加快衰减速度（约2倍）
+      console.log(
+        `[DEBUG] 局部图谱：使用快速收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`,
+      )
     } else {
-      console.log(`[DEBUG] 全局图谱：使用默认收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`)
+      console.log(
+        `[DEBUG] 全局图谱：使用默认收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`,
+      )
     }
 
     // 监听 simulation 收敛完成
@@ -1223,7 +1260,9 @@ if (!(window as any).graph2Initialized) {
 
     console.log("[DEBUG] 启动动画循环")
     animationId = requestAnimationFrame(animate)
-    console.debug(`[Graph] Rendered graph for ${slug}. Containers: ${document.getElementsByClassName("graph-container").length}`)
+    console.debug(
+      `[Graph] Rendered graph for ${slug}. Containers: ${document.getElementsByClassName("graph-container").length}`,
+    )
     console.log("[DEBUG] renderGraph 函数即将返回")
 
     return () => {
@@ -1354,7 +1393,7 @@ if (!(window as any).graph2Initialized) {
     // 确保主线程从高峰负载中恢复
     if (!(window as any).__firstScreenLoaded) {
       setTimeout(() => {
-        (window as any).__firstScreenLoaded = true
+        ;(window as any).__firstScreenLoaded = true
         console.log("%c[Guard] 首屏加载完成，导航已解锁", "color: #00ff00; font-weight: bold")
       }, 500)
     }
