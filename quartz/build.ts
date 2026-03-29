@@ -55,9 +55,9 @@ type BuildData = {
 // WAL 模式会自动创建 data/.quartz-cache.db-wal 和 data/.quartz-cache.db-shm
 
 // 初始化或加载图谱数据库
-function getGraphDatabase(): GraphDatabase {
+function getGraphDatabase(cacheDir?: string): GraphDatabase {
   // 确保 data 文件夹存在
-  const dataDir = path.join(process.cwd(), "data")
+  const dataDir = cacheDir ? path.resolve(cacheDir) : path.join(process.cwd(), "data")
   // 注意：这里使用同步方法，因为 DatabaseSync 构造函数需要同步路径
   // 如果文件夹不存在，DatabaseSync 会自动创建数据库文件，但不会创建父目录
   // 所以我们需要先确保目录存在
@@ -290,7 +290,7 @@ async function buildQuartzIncremental(argv: Argv, mut: Mutex, clientRefresh: () 
 
   // 检测是否需要重置缓存和输出目录
   perf.addEvent("load-cache")
-  const graphDb = getGraphDatabase()
+  const graphDb = getGraphDatabase(argv.settings)
   ctx.graphDb = graphDb
 
   const currentDirectory = argv.directory

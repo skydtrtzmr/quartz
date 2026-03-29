@@ -1,6 +1,8 @@
 import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 import { defaultColors, oceanColors } from "./quartz/themes"
+import fs from "fs"
+import path from "path"
 /**
  * Quartz 4 Configuration
  *
@@ -93,6 +95,28 @@ const config: QuartzConfig = {
       // Plugin.CustomOgImages(),
     ],
   },
+}
+
+// ===== 运行时 JSON 覆盖（对 esbuild 透明，使用 fs.readFileSync）=====
+//
+// 仅覆盖 configuration 中的纯数据字段，plugins 始终保持不变。
+// JSON 文件中存在的字段以 JSON 为准，其余字段保留 quartz.config.ts 默认值。
+const settingsArg = process.argv.find((a) => a.startsWith("--settings="))
+if (settingsArg) {
+  const settingsPath = settingsArg.split("=").slice(1).join("=") // 兼容路径中含 "=" 的情况
+  const configJsonPath = path.join(settingsPath, "config.json")
+  try {
+    const raw = fs.readFileSync(configJsonPath, "utf-8")
+    const override = JSON.parse(raw) as Partial<typeof config.configuration>
+    // 浅合并：只覆盖 configuration 层，不触碰 plugins
+    Object.assign(config.configuration, override)
+    console.log(`[settings] 已加载 ${configJsonPath}，覆盖字段：${Object.keys(override).join(", ")}`)
+  } catch (e: any) {
+    if (e.code !== "ENOENT") {
+      // 文件不存在时静默跳过；其他错误（如 JSON 格式错误）打印警告
+      console.warn(`[settings] 无法加载 ${configJsonPath}：${e.message}`)
+    }
+  }
 }
 
 export default config
