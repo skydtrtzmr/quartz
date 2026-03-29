@@ -4,6 +4,8 @@ import { FileTrieNode } from "./quartz/util/fileTrie"
 import fs from "fs"
 import path from "path"
 
+// TODO ： 写个排序函数构建函数
+
 // ===== 预定义排序策略（esbuild 可以静态分析，esbuild 不会尝试解析函数内部逻辑）=====
 //
 // sortBy.key:  "name" | "date"
@@ -19,39 +21,6 @@ type SortOrder = "asc" | "desc"
 interface SortByConfig {
   key?: SortKey
   order?: SortOrder
-}
-
-function buildExplorerSortFn(
-  sortBy?: SortByConfig,
-): (a: FileTrieNode, b: FileTrieNode) => number {
-  const key: SortKey = sortBy?.key ?? "name"
-  const direction = sortBy?.order === "desc" ? -1 : 1
-
-  return (a: FileTrieNode, b: FileTrieNode): number => {
-    // 文件夹始终优先于文件（不受排序策略影响）
-    if (a.isFolder !== b.isFolder) {
-      return a.isFolder ? -1 : 1
-    }
-
-    if (key === "date") {
-      const da = (a.data as any)?.date as Date | undefined
-      const db = (b.data as any)?.date as Date | undefined
-      // 无日期的节点排在末尾
-      if (!da && !db) return 0
-      if (!da) return 1
-      if (!db) return -1
-      return direction * (da.getTime() - db.getTime())
-    }
-
-    // key === "name"（默认）
-    return (
-      direction *
-      a.displayName.localeCompare(b.displayName, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      })
-    )
-  }
 }
 
 // ===== 运行时读取 layout.json（fs.readFileSync 对 esbuild 透明）=====
@@ -83,8 +52,6 @@ if (settingsArg) {
   }
 }
 
-// 根据配置构建排序函数
-const explorerSortFn = buildExplorerSortFn(layoutCfg.explorer?.sortBy)
 const backlinksCfg = { hideWhenEmpty: layoutCfg.backlinks?.hideWhenEmpty ?? false }
 
 // components shared across all pages
@@ -126,7 +93,7 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.Explorer2({
       stickyHeaders: false,
-      sortFn: explorerSortFn,
+      // sortFn: explorerSortFn,
     }),
   ],
   right: [
@@ -160,7 +127,7 @@ export const defaultListPageLayout: PageLayout = {
     }),
     Component.Explorer2({
       stickyHeaders: false,
-      sortFn: explorerSortFn,
+      // sortFn: explorerSortFn,
     }),
   ],
   right: [],
