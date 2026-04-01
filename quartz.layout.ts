@@ -130,7 +130,11 @@ export const defaultListPageLayout: PageLayout = {
       // sortFn: explorerSortFn,
     }),
   ],
-  right: [],
+  right: [
+    Component.Graph(),
+    Component.DesktopOnly(Component.TableOfContents()),
+    Component.Backlinks(backlinksCfg),
+  ],
 }
 
 
