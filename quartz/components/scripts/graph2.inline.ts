@@ -66,15 +66,18 @@ if (!(window as any).graph2Initialized) {
   type SimpleLinkData = {
     source: SimpleSlug
     target: SimpleSlug
+    sourceField?: string  // frontmatter 字段名，空表示正文引用
   }
 
   type LinkData = {
     source: NodeData
     target: NodeData
+    sourceField?: string
   } & SimulationLinkDatum<NodeData>
 
   type LinkRenderData = GraphicsInfo & {
     simulationData: LinkData
+    label?: Text  // 边标签（frontmatter 字段名）
   }
 
   type NodeRenderData = GraphicsInfo & {
@@ -230,6 +233,27 @@ if (!(window as any).graph2Initialized) {
     const tags: SimpleSlug[] = []
     const validLinks = new Set(data.keys())
 
+    // 辅助函数：从 frontmatter 中查找包含指定链接的字段名
+    function getFrontmatterFieldForLink(frontmatter: any, targetLink: string): string | undefined {
+      if (!frontmatter) return undefined
+      for (const [key, value] of Object.entries(frontmatter)) {
+        if (typeof value === 'string' && value.includes('[[' + targetLink + ']]')) {
+          return key
+        }
+        if (typeof value === 'string' && value.includes('[[')) {
+          // 检查是否包含相对路径形式的链接，如 ./target
+          const match = value.match(/\[\[\.?\.?\/?([^\]|#]+)/)
+          if (match) {
+            const normalizedTarget = match[1].replace(/^\.\//, '').replace(/^\//, '')
+            if (normalizedTarget === targetLink || targetLink.endsWith(normalizedTarget)) {
+              return key
+            }
+          }
+        }
+      }
+      return undefined
+    }
+
     // 将虚拟节点也加入有效链接集合
     for (const virtualSlug of virtualNodes) {
       validLinks.add(virtualSlug)
@@ -268,7 +292,8 @@ if (!(window as any).graph2Initialized) {
           const outgoing = (currentData as any).links ?? []
           for (const dest of outgoing) {
             if (validLinks.has(dest)) {
-              links.push({ source: current, target: dest })
+              const sourceField = getFrontmatterFieldForLink((currentData as any).frontmatter, dest)
+              links.push({ source: current, target: dest, sourceField })
               queue.push({ slug: dest, depth: currentDepth + 1 })
             }
           }
@@ -292,7 +317,8 @@ if (!(window as any).graph2Initialized) {
         for (const [source, details] of data.entries()) {
           const outgoing = details.links ?? []
           if (outgoing.includes(current)) {
-            links.push({ source, target: current })
+            const sourceField = getFrontmatterFieldForLink(details.frontmatter, current)
+            links.push({ source, target: current, sourceField })
             queue.push({ slug: source, depth: currentDepth + 1 })
           }
         }
@@ -303,7 +329,8 @@ if (!(window as any).graph2Initialized) {
           const outgoing = currentData.links ?? []
           for (const dest of outgoing) {
             if (virtualNodes.has(dest)) {
-              links.push({ source: current, target: dest })
+              const sourceField = getFrontmatterFieldForLink((currentData as any).frontmatter, dest)
+              links.push({ source: current, target: dest, sourceField })
               queue.push({ slug: dest, depth: currentDepth + 1 })
             }
           }
@@ -324,7 +351,8 @@ if (!(window as any).graph2Initialized) {
 
         for (const dest of outgoing) {
           if (validLinks.has(dest)) {
-            links.push({ source: source, target: dest })
+            const sourceField = getFrontmatterFieldForLink(details.frontmatter, dest)
+            links.push({ source: source, target: dest, sourceField })
           }
         }
 
@@ -347,7 +375,8 @@ if (!(window as any).graph2Initialized) {
         const outgoing = details.links ?? []
         for (const dest of outgoing) {
           if (virtualNodes.has(dest)) {
-            links.push({ source, target: dest })
+            const sourceField = getFrontmatterFieldForLink(details.frontmatter, dest)
+            links.push({ source, target: dest, sourceField })
           }
         }
       }
@@ -392,6 +421,7 @@ if (!(window as any).graph2Initialized) {
       .map((l) => ({
         source: allNodes.find((n) => n.id === l.source)!,
         target: allNodes.find((n) => n.id === l.target)!,
+        sourceField: l.sourceField,
       }))
 
     // 计算每个节点的连接数
@@ -719,9 +749,10 @@ if (!(window as any).graph2Initialized) {
     stage.interactive = false
 
     const labelsContainer = new Container<Text>({ zIndex: 3, isRenderGroup: true })
+    const edgeLabelsContainer = new Container<Text>({ zIndex: 4, isRenderGroup: true })
     const nodesContainer = new Container<Graphics>({ zIndex: 2, isRenderGroup: true })
     const linkContainer = new Container<Graphics>({ zIndex: 1, isRenderGroup: true })
-    stage.addChild(nodesContainer, labelsContainer, linkContainer)
+    stage.addChild(nodesContainer, labelsContainer, linkContainer, edgeLabelsContainer)
 
     // ====== 对象池初始化 ======
     const graphicsPool = new ObjectPool<Graphics>(
@@ -835,9 +866,32 @@ if (!(window as any).graph2Initialized) {
       const gfx = new Graphics({ interactive: false, eventMode: "none" })
       linkContainer.addChild(gfx)
 
+      // 创建边标签（仅 frontmatter 来源的边显示标签）
+      let label: Text | undefined
+      if (l.sourceField) {
+        label = new Text({
+          text: l.sourceField,
+          style: {
+            fontSize: 10,
+            fill: computedStyleMap["--dark"],
+            fontFamily: computedStyleMap["--bodyFont"],
+            fontWeight: 'bold',
+            stroke: {
+              width: 2,
+              color: computedStyleMap["--light"],
+            },
+          },
+          alpha: 0.85,
+          resolution: 2,
+        })
+        label.anchor.set(0.5, 0.5)
+        edgeLabelsContainer.addChild(label)
+      }
+
       const linkRenderDatum: LinkRenderData = {
         simulationData: l,
         gfx,
+        label,
         color: computedStyleMap["--lightgray"],
         alpha: 1,
         active: false,
@@ -1321,6 +1375,14 @@ if (!(window as any).graph2Initialized) {
           l.gfx.moveTo(x1, y1)
           l.gfx.lineTo(x2, y2)
           l.gfx.stroke({ alpha: l.alpha, width: 1, color: l.color })
+        }
+        
+        // 更新边标签位置（中点）
+        if (l.label) {
+          const midX = (x1 + x2) / 2
+          const midY = (y1 + y2) / 2
+          l.label.position.set(midX, midY)
+          l.label.alpha = l.active ? 1.0 : 0.85
         }
       }
 
