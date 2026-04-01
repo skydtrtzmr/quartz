@@ -179,6 +179,7 @@ if (!(window as any).graph2Initialized) {
       showTags,
       focusOnHover,
       enableRadial,
+      showArrows = true,
     } = JSON.parse(graph.dataset["cfg"]!) as D3Config
 
     console.log('dataset:', graph.dataset);
@@ -197,35 +198,40 @@ if (!(window as any).graph2Initialized) {
     )
     console.log("[DEBUG] fetchData 完成，数据条目数:", data.size)
 
-    // 加载虚拟节点索引
-    console.log("[DEBUG] 开始加载虚拟节点索引")
-    let virtualNodeData: Map<SimpleSlug, { title: string; links: SimpleSlug[]; content: string }> =
-      new Map()
-    try {
-      const virtualIndexResponse = await fetch(getHref("static/virtualNodeIndex.json"))
-      if (virtualIndexResponse.ok) {
-        const virtualIndex = await virtualIndexResponse.json()
-        Object.entries(virtualIndex).forEach(([k, v]) => {
-          virtualNodeData.set(
-            simplifySlug(k as FullSlug),
-            v as { title: string; links: SimpleSlug[]; content: string },
-          )
-        })
-        console.log("[DEBUG] 虚拟节点索引加载完成，条目数:", virtualNodeData.size)
-      } else {
-        console.log("[DEBUG] 虚拟节点索引不存在或加载失败")
+    // 动态计算虚拟节点（像 tags 一样）
+    // 虚拟节点：被引用但文件不存在的 slug，作为被指向的目标
+    const virtualNodes = new Set<SimpleSlug>()
+    const allExistingSlugs = new Set(data.keys())
+    const allTags = new Set<SimpleSlug>()
+    
+    // 先收集所有 tags
+    for (const [, details] of data.entries()) {
+      if (details.tags) {
+        for (const tag of details.tags) {
+          allTags.add(simplifySlug(("tags/" + tag) as FullSlug))
+        }
       }
-    } catch (e) {
-      console.log("[DEBUG] 虚拟节点索引加载异常:", e)
-      // 虚拟节点索引文件不存在，忽略
     }
+    
+    // 从所有文件的 links 中提取虚拟节点
+    for (const [, details] of data.entries()) {
+      const outgoing = details.links ?? []
+      for (const link of outgoing) {
+        // 虚拟节点条件：不存在、不是 tag、不以 tags/ 开头
+        if (!allExistingSlugs.has(link) && !allTags.has(link) && !link.startsWith("tags/")) {
+          virtualNodes.add(link)
+        }
+      }
+    }
+    
+    console.log("[DEBUG] 动态计算虚拟节点完成，数量:", virtualNodes.size)
 
     const links: SimpleLinkData[] = []
     const tags: SimpleSlug[] = []
     const validLinks = new Set(data.keys())
 
     // 将虚拟节点也加入有效链接集合
-    for (const virtualSlug of virtualNodeData.keys()) {
+    for (const virtualSlug of virtualNodes) {
       validLinks.add(virtualSlug)
     }
 
@@ -254,8 +260,8 @@ if (!(window as any).graph2Initialized) {
         // 只有在深度允许的情况下才继续扩展邻居
         if (currentDepth >= depth) continue
 
-        // 获取当前节点的数据
-        const currentData = data.get(current) ?? virtualNodeData.get(current)
+        // 获取当前节点的数据（虚拟节点只有作为目标，不需要数据）
+        const currentData = data.get(current)
 
         // 处理当前节点的出链接
         if (currentData) {
@@ -291,11 +297,15 @@ if (!(window as any).graph2Initialized) {
           }
         }
 
-        // 检查虚拟节点的入链接
-        for (const [virtualSource, vDetails] of virtualNodeData.entries()) {
-          if (vDetails.links.includes(current)) {
-            links.push({ source: virtualSource, target: current })
-            queue.push({ slug: virtualSource, depth: currentDepth + 1 })
+        // 处理当前节点引用的虚拟节点
+        // 虚拟节点是被指向的目标，链接方向：current → virtualTarget
+        if (currentData) {
+          const outgoing = currentData.links ?? []
+          for (const dest of outgoing) {
+            if (virtualNodes.has(dest)) {
+              links.push({ source: current, target: dest })
+              queue.push({ slug: dest, depth: currentDepth + 1 })
+            }
           }
         }
       }
@@ -331,11 +341,13 @@ if (!(window as any).graph2Initialized) {
         }
       }
 
-      // 处理虚拟节点的链接（虚拟节点作为源节点）
-      for (const [virtualSource, vDetails] of virtualNodeData.entries()) {
-        for (const dest of vDetails.links) {
-          if (validLinks.has(dest)) {
-            links.push({ source: virtualSource, target: dest })
+      // 处理虚拟节点的链接（虚拟节点作为目标节点）
+      // 遍历所有文件，找到引用虚拟节点的链接
+      for (const [source, details] of data.entries()) {
+        const outgoing = details.links ?? []
+        for (const dest of outgoing) {
+          if (virtualNodes.has(dest)) {
+            links.push({ source, target: dest })
           }
         }
       }
@@ -343,7 +355,7 @@ if (!(window as any).graph2Initialized) {
       // 全局图谱：添加所有节点到邻域
       validLinks.forEach((id) => neighbourhood.add(id))
       if (showTags) tags.forEach((tag) => neighbourhood.add(tag))
-      virtualNodeData.forEach((_, virtualSlug) => neighbourhood.add(virtualSlug))
+      virtualNodes.forEach((virtualSlug) => neighbourhood.add(virtualSlug))
 
       const endTime = performance.now()
       console.log(
@@ -357,7 +369,7 @@ if (!(window as any).graph2Initialized) {
     const allNodes: NodeData[] = [...neighbourhood].map((url) => {
       const text = url.startsWith("tags/")
         ? "#" + url.substring(5)
-        : (data.get(url)?.title ?? virtualNodeData.get(url)?.title ?? url)
+        : (data.get(url)?.title ?? url)  // 虚拟节点用 slug 作为 title
       return {
         id: url,
         text,
@@ -366,9 +378,17 @@ if (!(window as any).graph2Initialized) {
       }
     })
 
-    // 先创建所有链接
+    // 先创建所有链接，并去重（避免虚拟节点等导致的重复链接）
+    const linkKeySet = new Set<string>()
     const allLinks = links
       .filter((l) => neighbourhood.has(l.source) && neighbourhood.has(l.target))
+      .filter((l) => {
+        // 去重：使用 "source->target" 作为 key
+        const key = `${l.source}->${l.target}`
+        if (linkKeySet.has(key)) return false
+        linkKeySet.add(key)
+        return true
+      })
       .map((l) => ({
         source: allNodes.find((n) => n.id === l.source)!,
         target: allNodes.find((n) => n.id === l.target)!,
@@ -1227,7 +1247,7 @@ if (!(window as any).graph2Initialized) {
         }
       }
 
-      // 渲染所有链接
+      // 渲染所有链接（带方向箭头）
       for (const l of linkRenderData) {
         const linkData = l.simulationData
         const sourceX = linkData.source.x
@@ -1247,10 +1267,61 @@ if (!(window as any).graph2Initialized) {
 
         l.gfx.visible = true
         l.gfx.clear()
-        l.gfx.moveTo(sourceX + width / 2, sourceY + height / 2)
-        l.gfx
-          .lineTo(targetX + width / 2, targetY + height / 2)
-          .stroke({ alpha: l.alpha, width: 1, color: l.color })
+
+        // 坐标转换（加上画布中心偏移）
+        const x1 = sourceX + width / 2
+        const y1 = sourceY + height / 2
+        const x2 = targetX + width / 2
+        const y2 = targetY + height / 2
+
+        // 根据配置决定是否显示箭头
+        if (showArrows) {
+          // 计算箭头位置（避免与节点重叠）
+          const targetRadius = nodeRadius(linkData.target)
+          const dx = x2 - x1
+          const dy = y2 - y1
+          const len = Math.sqrt(dx * dx + dy * dy)
+          const arrowSize = 5
+          
+          // 如果线段太短，不画箭头
+          if (len > targetRadius + arrowSize) {
+            // 计算箭头起点（在 target 节点边缘）
+            const ratio = (len - targetRadius) / len
+            const arrowX = x1 + dx * ratio
+            const arrowY = y1 + dy * ratio
+            
+            // 绘制线段（从 source 到箭头起点）
+            l.gfx.moveTo(x1, y1)
+            l.gfx.lineTo(arrowX, arrowY)
+            l.gfx.stroke({ alpha: l.alpha, width: 1, color: l.color })
+            
+            // 计算箭头角度
+            const angle = Math.atan2(dy, dx)
+            
+            // 绘制箭头三角形
+            l.gfx.moveTo(arrowX, arrowY)
+            l.gfx.lineTo(
+              arrowX - arrowSize * Math.cos(angle - Math.PI / 6),
+              arrowY - arrowSize * Math.sin(angle - Math.PI / 6)
+            )
+            l.gfx.lineTo(
+              arrowX - arrowSize * Math.cos(angle + Math.PI / 6),
+              arrowY - arrowSize * Math.sin(angle + Math.PI / 6)
+            )
+            l.gfx.lineTo(arrowX, arrowY)
+            l.gfx.fill({ color: l.color })
+          } else {
+            // 线段太短，只画线不画箭头
+            l.gfx.moveTo(x1, y1)
+            l.gfx.lineTo(x2, y2)
+            l.gfx.stroke({ alpha: l.alpha, width: 1, color: l.color })
+          }
+        } else {
+          // 无箭头模式：简单绘制线段
+          l.gfx.moveTo(x1, y1)
+          l.gfx.lineTo(x2, y2)
+          l.gfx.stroke({ alpha: l.alpha, width: 1, color: l.color })
+        }
       }
 
       tweens.forEach((t) => t.update(time))
