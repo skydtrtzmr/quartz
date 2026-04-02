@@ -661,6 +661,8 @@ if (!(window as any).graph2Initialized) {
 
       const defaultScale = 1 / scale
       const activeScale = defaultScale * 1.1
+      
+      // 处理节点 label
       for (const n of nodeRenderData) {
         const nodeId = n.simulationData.id
 
@@ -684,6 +686,37 @@ if (!(window as any).graph2Initialized) {
               100,
             ),
           )
+        }
+      }
+      
+      // 处理边 label（跟随边的高亮状态）
+      for (const l of linkRenderData) {
+        if (l.label) {
+          if (l.active) {
+            // 高亮：放大 1.1 倍，颜色变深
+            l.label.style.fill = computedStyleMap["--dark"]
+            tweenGroup.add(
+              new Tweened<Text>(l.label).to(
+                {
+                  alpha: 1,
+                  scale: { x: activeScale, y: activeScale },
+                },
+                100,
+              ),
+            )
+          } else {
+            // 非高亮：正常大小，颜色灰色，alpha 由 zoom 渐变控制
+            l.label.style.fill = computedStyleMap["--darkgray"]
+            tweenGroup.add(
+              new Tweened<Text>(l.label).to(
+                {
+                  alpha: l.label.alpha,
+                  scale: { x: defaultScale, y: defaultScale },
+                },
+                100,
+              ),
+            )
+          }
         }
       }
 
@@ -748,11 +781,11 @@ if (!(window as any).graph2Initialized) {
     const stage = app.stage
     stage.interactive = false
 
-    const labelsContainer = new Container<Text>({ zIndex: 3, isRenderGroup: true })
-    const edgeLabelsContainer = new Container<Text>({ zIndex: 4, isRenderGroup: true })
+    const edgeLabelsContainer = new Container<Text>({ zIndex: 3, isRenderGroup: true })  // 边标签在节点标签下面
+    const labelsContainer = new Container<Text>({ zIndex: 4, isRenderGroup: true })
     const nodesContainer = new Container<Graphics>({ zIndex: 2, isRenderGroup: true })
     const linkContainer = new Container<Graphics>({ zIndex: 1, isRenderGroup: true })
-    stage.addChild(nodesContainer, labelsContainer, linkContainer, edgeLabelsContainer)
+    stage.addChild(linkContainer, edgeLabelsContainer, nodesContainer, labelsContainer)
 
     // ====== 对象池初始化 ======
     const graphicsPool = new ObjectPool<Graphics>(
@@ -872,16 +905,16 @@ if (!(window as any).graph2Initialized) {
         label = new Text({
           text: l.sourceField,
           style: {
-            fontSize: 10,
-            fill: computedStyleMap["--dark"],
+            fontSize: 9,
+            fill: computedStyleMap["--darkgray"],  // 非高亮用浅灰色
             fontFamily: computedStyleMap["--bodyFont"],
-            fontWeight: 'bold',
+            // 轻微描边提高可读性
             stroke: {
-              width: 2,
+              width: 1,
               color: computedStyleMap["--light"],
             },
           },
-          alpha: 0.85,
+          alpha: 0,
           resolution: 2,
         })
         label.anchor.set(0.5, 0.5)
@@ -1269,6 +1302,10 @@ if (!(window as any).graph2Initialized) {
                 label.alpha = scaleOpacity
               }
             }
+            // 边标签也跟随 zoom 渐变
+            for (const label of edgeLabelsContainer.children) {
+              label.alpha = scaleOpacity
+            }
           }),
       )
     }
@@ -1382,7 +1419,7 @@ if (!(window as any).graph2Initialized) {
           const midX = (x1 + x2) / 2
           const midY = (y1 + y2) / 2
           l.label.position.set(midX, midY)
-          l.label.alpha = l.active ? 1.0 : 0.85
+          // 缩放和颜色在 renderLabels 中通过 tween 处理
         }
       }
 
