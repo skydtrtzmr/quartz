@@ -101,9 +101,21 @@ const config: QuartzConfig = {
 //
 // 仅覆盖 configuration 中的纯数据字段，plugins 始终保持不变。
 // JSON 文件中存在的字段以 JSON 为准，其余字段保留 quartz.config.ts 默认值。
-const settingsArg = process.argv.find((a) => a.startsWith("--settings="))
-if (settingsArg) {
-  const settingsPath = settingsArg.split("=").slice(1).join("=") // 兼容路径中含 "=" 的情况
+
+// 支持 --settings=<path> 和 --settings <path> 两种格式
+let settingsPath: string | undefined
+const settingsArgIndex = process.argv.findIndex((a) => a === "--settings" || a.startsWith("--settings="))
+if (settingsArgIndex !== -1) {
+  if (process.argv[settingsArgIndex].startsWith("--settings=")) {
+    // --settings=<path> 格式
+    settingsPath = process.argv[settingsArgIndex].split("=").slice(1).join("=")
+  } else if (settingsArgIndex + 1 < process.argv.length) {
+    // --settings <path> 格式
+    settingsPath = process.argv[settingsArgIndex + 1]
+  }
+}
+
+if (settingsPath) {
   const configJsonPath = path.join(settingsPath, "config.json")
   try {
     const raw = fs.readFileSync(configJsonPath, "utf-8")
