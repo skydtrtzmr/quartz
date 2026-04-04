@@ -905,7 +905,7 @@ if (!(window as any).graph2Initialized) {
         label = new Text({
           text: l.sourceField,
           style: {
-            fontSize: 9,
+            fontSize: fontSize * 15 * 0.85,  // 边标签比节点标签稍小（0.85倍）
             fill: computedStyleMap["--darkgray"],  // 非高亮用浅灰色
             fontFamily: computedStyleMap["--bodyFont"],
             // 轻微描边提高可读性
@@ -915,7 +915,7 @@ if (!(window as any).graph2Initialized) {
             },
           },
           alpha: 0,
-          resolution: 2,
+          resolution: window.devicePixelRatio * 4,
         })
         label.anchor.set(0.5, 0.5)
         edgeLabelsContainer.addChild(label)
