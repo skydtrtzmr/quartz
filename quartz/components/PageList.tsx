@@ -1,8 +1,10 @@
 import { FullSlug, isFolderPath, resolveRelative } from "../util/path"
 import { QuartzPluginData } from "../plugins/vfile"
-import { Date, getDate } from "./Date"
+import { Date, getDate, formatDate } from "./Date"
 import { QuartzComponent, QuartzComponentProps } from "./types"
 import { GlobalConfiguration } from "../cfg"
+// @ts-ignore
+import script from "./scripts/pageList.inline"
 
 export type SortFn = (f1: QuartzPluginData, f2: QuartzPluginData) => number
 
@@ -52,21 +54,62 @@ export function byDateAndAlphabeticalFolderFirst(cfg: GlobalConfiguration): Sort
   }
 }
 
+export type BatchLoadOptions = {
+  enable?: boolean
+  initialCount?: number
+  loadMoreCount?: number
+}
+
+interface BatchPageData {
+  slug: string
+  title: string
+  tags: string[]
+  dateStr?: string
+}
+
 type Props = {
   limit?: number
   sort?: SortFn
+  batchLoad?: BatchLoadOptions
 } & QuartzComponentProps
 
-export const PageList: QuartzComponent = ({ cfg, fileData, allFiles, limit, sort }: Props) => {
+export const PageList: QuartzComponent = ({ cfg, fileData, allFiles, limit, sort, batchLoad }: Props) => {
   const sorter = sort ?? byDateAndAlphabeticalFolderFirst(cfg)
   let list = allFiles.sort(sorter)
   if (limit) {
     list = list.slice(0, limit)
   }
 
+  const initialCount = batchLoad?.initialCount ?? 10
+  const isBatchEnabled = batchLoad?.enable && !limit && list.length > initialCount
+
+  let displayList = list
+  let remainingData: string = "[]"
+
+  if (isBatchEnabled) {
+    displayList = list.slice(0, initialCount)
+    const remaining: BatchPageData[] = list.slice(initialCount).map((page) => {
+      const date = getDate(cfg, page)
+      return {
+        slug: page.slug!,
+        title: page.frontmatter?.title ?? "",
+        tags: page.frontmatter?.tags ?? [],
+        dateStr: date ? formatDate(date, cfg.locale) : undefined,
+      }
+    })
+    remainingData = JSON.stringify(remaining)
+  }
+
   return (
-    <ul class="section-ul">
-      {list.map((page) => {
+    <ul
+      class="section-ul"
+      data-batch-load={isBatchEnabled ? "true" : undefined}
+      data-current-slug={fileData.slug}
+      data-initial-count={isBatchEnabled ? initialCount : undefined}
+      data-load-more-count={isBatchEnabled ? (batchLoad?.loadMoreCount ?? 10) : undefined}
+      data-remaining-pages={isBatchEnabled ? remainingData : undefined}
+    >
+      {displayList.map((page) => {
         const title = page.frontmatter?.title
         const tags = page.frontmatter?.tags ?? []
 
@@ -111,4 +154,29 @@ PageList.css = `
 .section > .tags {
   margin: 0;
 }
+
+.load-more-item {
+  list-style: none;
+  margin-top: 1em;
+  text-align: center;
+}
+
+.load-more-btn {
+  padding: 0.5em 1.5em;
+  background-color: var(--lightgray);
+  border: 1px dashed var(--gray);
+  border-radius: 6px;
+  color: var(--darkgray);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.load-more-btn:hover {
+  background-color: var(--highlight);
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
 `
+
+PageList.afterDOMLoaded = script

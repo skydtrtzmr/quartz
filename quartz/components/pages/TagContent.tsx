@@ -129,5 +129,6 @@ export default ((opts?: Partial<TagContentOptions>) => {
   }
 
   TagContent.css = concatenateResources(style, PageList.css)
+  TagContent.afterDOMLoaded = PageList.afterDOMLoaded
   return TagContent
 }) satisfies QuartzComponentConstructor

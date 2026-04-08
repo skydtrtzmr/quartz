@@ -1,7 +1,7 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "../types"
 
 import style from "../styles/listPage.scss"
-import { PageList, SortFn } from "../PageList"
+import { PageList, SortFn, BatchLoadOptions } from "../PageList"
 import { Root } from "hast"
 import { htmlToJsx } from "../../util/jsx"
 import { i18n } from "../../i18n"
@@ -17,15 +17,17 @@ interface FolderContentOptions {
   showFolderCount: boolean
   showSubfolders: boolean
   sort?: SortFn
+  batchLoad?: BatchLoadOptions
 }
 
 const defaultOptions: FolderContentOptions = {
   showFolderCount: true,
   showSubfolders: true,
+  batchLoad: { enable: true, initialCount: 20, loadMoreCount: 20 },
 }
 
 export default ((opts?: Partial<FolderContentOptions>) => {
-  const options: FolderContentOptions = { ...defaultOptions, ...opts }
+  const options: FolderContentOptions = { ...defaultOptions, ...opts, batchLoad: { ...defaultOptions.batchLoad, ...opts?.batchLoad } }
 
   const FolderContent: QuartzComponent = (props: QuartzComponentProps) => {
     const { tree, fileData, allFiles, cfg } = props
@@ -117,7 +119,7 @@ export default ((opts?: Partial<FolderContentOptions>) => {
             </p>
           )}
           <div>
-            <PageList {...listProps} />
+            <PageList {...listProps} batchLoad={options.batchLoad} />
           </div>
         </div>
       </div>
@@ -125,5 +127,6 @@ export default ((opts?: Partial<FolderContentOptions>) => {
   }
 
   FolderContent.css = concatenateResources(style, PageList.css)
+  FolderContent.afterDOMLoaded = PageList.afterDOMLoaded
   return FolderContent
 }) satisfies QuartzComponentConstructor
