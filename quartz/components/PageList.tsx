@@ -161,18 +161,19 @@ PageList.css = `
   text-align: center;
 }
 
-.load-more-btn {
-  padding: 0.5em 1.5em;
-  background-color: var(--lightgray);
-  border: 1px dashed var(--gray);
+.page-list-load-more-btn {
+  width: 100%;
+  padding: 0.6em 1em;
+  background-color: transparent;
+  border: 1px solid var(--lightgray);
   border-radius: 6px;
   color: var(--darkgray);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.load-more-btn:hover {
+.page-list-load-more-btn:hover {
   background-color: var(--highlight);
   border-color: var(--secondary);
   color: var(--secondary);

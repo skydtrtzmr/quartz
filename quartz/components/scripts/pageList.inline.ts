@@ -29,7 +29,7 @@ function setupPageListBatchLoad() {
         loadMoreItem = document.createElement("li")
         loadMoreItem.className = "load-more-item"
         const btn = document.createElement("button")
-        btn.className = "load-more-btn"
+        btn.className = "page-list-load-more-btn"
         btn.type = "button"
         btn.addEventListener("click", () => {
           const count = loadMoreCount
@@ -75,7 +75,7 @@ function setupPageListBatchLoad() {
         ul.appendChild(loadMoreItem)
       }
 
-      const btn = loadMoreItem.querySelector(".load-more-btn") as HTMLButtonElement
+      const btn = loadMoreItem.querySelector(".page-list-load-more-btn") as HTMLButtonElement
       btn.textContent = `加载更多 (剩余 ${remaining.length} 条)`
     }
 
