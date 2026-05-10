@@ -612,7 +612,7 @@ function main() {
     const singleLinkEdgeNodeIds = new Set(singleLinkEdgeNodes.map((n) => n.id))
 
     // ===== 边缘节点聚合 =====
-    // 根据 aggregation.fields 配置，将边缘节点按字段值分组为聚合节点
+    // 根据 aggregation 规则列表配置，将边缘节点按规则顺序分组为聚合节点
     // 聚合节点作为核心节点的新"边缘邻居"替代散点边缘节点
     interface AggregationNodeInfo {
       node: NodeData
@@ -628,156 +628,102 @@ function main() {
     // 聚合节点 ID → 所属核心节点 ID
     const aggToCoreMap = new Map<SimpleSlug, SimpleSlug>()
 
-    const hasFolderAgg = aggregation?.folder && (aggregation.folder.depth === undefined || aggregation.folder.depth > 0)
-    const hasFieldAgg = aggregation?.fields && aggregation.fields.length > 0
+    const rules = aggregation ?? []
 
-    if (hasFolderAgg || hasFieldAgg) {
-      // 逐个核心节点，对其单链接叶节点聚合
+    if (rules.length > 0) {
+      // 逐个核心节点，对其单链接叶节点按规则顺序聚合
       for (const [coreId, coreEdgeNodes] of nodeToEdgeNodes.entries()) {
-        const singleLinkLeaves = coreEdgeNodes.filter((n) => singleLinkEdgeNodeIds.has(n.id))
-        if (singleLinkLeaves.length <= 1) continue // 叶节点太少，无需聚合
+        let leavesForNextRule = coreEdgeNodes.filter((n) => singleLinkEdgeNodeIds.has(n.id))
+        if (leavesForNextRule.length <= 1) continue // 叶节点太少，无需聚合
 
-        let leavesForFieldAgg = singleLinkLeaves
+        // 按规则列表顺序执行聚合
+        for (let ruleIdx = 0; ruleIdx < rules.length; ruleIdx++) {
+          const rule = rules[ruleIdx]
+          if (leavesForNextRule.length <= 1) break
 
-        // ===== 文件夹聚合 =====
-        if (hasFolderAgg) {
-          const folderGroupMap = new Map<string, NodeData[]>()
-          for (const leaf of singleLinkLeaves) {
-            const parts = String(leaf.id).split('/')
-            const folderKey = parts.length > 1 ? parts[0] : '/'
-            const group = folderGroupMap.get(folderKey) ?? []
-            group.push(leaf)
-            folderGroupMap.set(folderKey, group)
-          }
+          const groupMap = new Map<string, NodeData[]>()
+          let hasValidValue = false
 
-          // 单文件夹跳过
-          if (folderGroupMap.size > 1) {
-            for (const [folderKey, childNodes] of folderGroupMap) {
-              const displayKey = folderKey === '/' ? '📁 根目录' : `📁 ${folderKey}`
-              const aggId = `agg:${coreId}:folder:${folderKey}` as SimpleSlug
-              const collapsedR = Math.min(30, Math.max(16, 2 + Math.sqrt(childNodes.length)))
-              const aggNode: NodeData = {
-                id: aggId,
-                text: displayKey,
-                tags: [],
-                isCore: false,
-                isAggregation: true,
-                edgeNodeCount: 0,
-                aggCollapsedRadius: collapsedR,
-                aggChildCount: childNodes.length,
-              }
+          for (const leaf of leavesForNextRule) {
+            const nodeDetails = contentData.get(leaf.id)
+            let groupKey: string | null = null
 
-              const childLinkSet: LinkData[] = []
-              const childLinkKeySet = new Set<string>()
-              for (const l of nonOrphanLinks) {
-                if (childNodes.some((cn) => cn.id === l.source.id || cn.id === l.target.id)) {
-                  const key = `${l.source.id}->${l.target.id}`
-                  if (!childLinkKeySet.has(key)) {
-                    childLinkKeySet.add(key)
-                    childLinkSet.push(l)
-                  }
-                }
-              }
-
-              aggToCoreMap.set(aggId, coreId)
-              aggNodeToChildNodes.set(aggId, childNodes)
-              aggNodeToChildLinks.set(aggId, childLinkSet)
-              aggNodeInfoMap.set(aggId, {
-                node: aggNode,
-                coreId,
-                childNodes,
-                childLinks: childLinkSet,
-                remainingFields: hasFieldAgg ? aggregation!.fields! : [],
-                currentField: '📁',
-              })
-              nonOrphanNodes.push(aggNode)
-            }
-          }
-        }
-
-        // 过滤掉已被文件夹聚合的叶子
-        const folderAggedIds = new Set<SimpleSlug>()
-        for (const [, info] of aggNodeInfoMap.entries()) {
-          if (info.coreId === coreId && info.currentField === '📁') {
-            for (const cn of info.childNodes) folderAggedIds.add(cn.id)
-          }
-        }
-        leavesForFieldAgg = singleLinkLeaves.filter((n) => !folderAggedIds.has(n.id))
-
-        // ===== 字段聚合（对未被文件夹聚合的叶子）=====
-        if (hasFieldAgg && leavesForFieldAgg.length > 1) {
-          const fields = aggregation!.fields!
-          // 动态查找第一个有效聚合字段
-          let effectiveFieldIdx = -1
-          let effectiveGroupMap: Map<string, NodeData[]> | null = null
-          let effectiveFieldName = ""
-
-          for (let i = 0; i < fields.length; i++) {
-            const field = fields[i].field
-            const granularity = fields[i].granularity
-            const groupMap = new Map<string, NodeData[]>()
-            let hasValidValue = false
-
-            for (const leaf of leavesForFieldAgg) {
-              const nodeDetails = contentData.get(leaf.id)
-              let fieldValue: string | undefined
-
-              if (nodeDetails) {
-                if (field === "date") {
-                  const dateStr = (nodeDetails as any).frontmatter?.date ?? (nodeDetails as any).date
-                  if (dateStr) {
-                    const d = new Date(dateStr)
-                    if (!isNaN(d.getTime())) {
-                      if (granularity === "year") fieldValue = `${d.getFullYear()}`
-                      else if (granularity === "month") fieldValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-                      else if (granularity === "quarter") fieldValue = `${d.getFullYear()} Q${Math.floor(d.getMonth() / 3) + 1}`
-                    }
-                  }
+            if (nodeDetails) {
+              if (rule.type === "folder") {
+                const parts = String(leaf.id).split("/")
+                const depth = rule.depth ?? 1
+                if (parts.length > 1) {
+                  const folderParts = depth > 1
+                    ? parts.slice(0, Math.min(depth, parts.length - 1))
+                    : [parts[0]]
+                  groupKey = folderParts.join("/")
                 } else {
-                  const rawValue = (nodeDetails as any).frontmatter?.[field]
-                  if (Array.isArray(rawValue)) {
-                    for (const v of rawValue) {
-                      if (v) {
-                        hasValidValue = true
-                        const group = groupMap.get(String(v)) ?? []
-                        group.push(leaf)
-                        groupMap.set(String(v), group)
-                      }
-                    }
-                    continue
-                  } else if (rawValue) {
-                    fieldValue = String(rawValue)
+                  groupKey = "/"
+                }
+              } else if (rule.type === "date") {
+                const field = rule.field || "date"
+                const dateStr = (nodeDetails as any).frontmatter?.[field] ?? (nodeDetails as any).date
+                if (dateStr) {
+                  const d = new Date(dateStr)
+                  if (!isNaN(d.getTime())) {
+                    hasValidValue = true
+                    const y = d.getFullYear()
+                    const m = d.getMonth() + 1
+                    if (rule.granularity === "year") groupKey = `${y}年`
+                    else if (rule.granularity === "month") groupKey = `${y}年${m}月`
+                    else if (rule.granularity === "quarter") groupKey = `${y}-Q${Math.ceil(m / 3)}`
+                    else groupKey = `${y}年${m}月`
                   }
                 }
+              } else if (rule.type === "field") {
+                const field = rule.field ?? ""
+                const rawValue = (nodeDetails as any).frontmatter?.[field]
+                if (Array.isArray(rawValue)) {
+                  for (const v of rawValue) {
+                    if (v) {
+                      hasValidValue = true
+                      const key = String(v)
+                      const group = groupMap.get(key) ?? []
+                      group.push(leaf)
+                      groupMap.set(key, group)
+                    }
+                  }
+                  continue
+                } else if (rawValue !== undefined && rawValue !== null) {
+                  hasValidValue = true
+                  groupKey = String(rawValue)
+                }
               }
-
-              if (fieldValue) {
-                hasValidValue = true
-              }
-              const key = fieldValue ?? "(无)"
-              const group = groupMap.get(key) ?? []
-              group.push(leaf)
-              groupMap.set(key, group)
             }
 
-            if (hasValidValue) {
-              effectiveFieldIdx = i
-              effectiveGroupMap = groupMap
-              effectiveFieldName = field
-              break
+            if (rule.type !== "folder" && !groupKey) {
+              groupKey = "(无)"
+            }
+            if (groupKey !== null) {
+              const group = groupMap.get(groupKey) ?? []
+              group.push(leaf)
+              groupMap.set(groupKey, group)
             }
           }
 
-          if (effectiveFieldIdx < 0 || !effectiveGroupMap) continue
+          // folder 规则：单分组跳过；field/date 规则：没有有效值则跳过
+          if (rule.type === "folder") {
+            if (groupMap.size <= 1) continue
+          } else {
+            if (!hasValidValue || groupMap.size === 0) continue
+          }
 
-          // 为每个分组创建聚合节点（ID 包含核心节点，保证唯一）
-          for (const [groupKey, childNodes] of effectiveGroupMap) {
-            const aggId = `agg:${coreId}:${effectiveFieldName}:${groupKey}` as SimpleSlug
-            // 收起半径：与核心节点 nodeRadius=2+√(linkCount) 一致的 sqrt 增长
+          // 为每个分组创建聚合节点
+          const displayPrefix = rule.type === "folder" ? "📁 " : ""
+          for (const [groupKey, childNodes] of groupMap) {
+            const displayKey = rule.type === "folder" && groupKey === "/"
+              ? "📁 根目录"
+              : `${displayPrefix}${groupKey}`
+            const aggId = `agg:${coreId}:${rule.type}:${rule.field ?? ""}:${groupKey}` as SimpleSlug
             const collapsedR = Math.min(30, Math.max(16, 2 + Math.sqrt(childNodes.length)))
             const aggNode: NodeData = {
               id: aggId,
-              text: groupKey,
+              text: displayKey,
               tags: [],
               isCore: false,
               isAggregation: true,
@@ -786,7 +732,6 @@ function main() {
               aggChildCount: childNodes.length,
             }
 
-            // 收集子节点的所有边（仅限这些叶节点的原始边）
             const childLinkSet: LinkData[] = []
             const childLinkKeySet = new Set<string>()
             for (const l of nonOrphanLinks) {
@@ -807,11 +752,20 @@ function main() {
               coreId,
               childNodes,
               childLinks: childLinkSet,
-              remainingFields: fields.slice(effectiveFieldIdx + 1),
-              currentField: effectiveFieldName,
+              remainingRules: rules.slice(ruleIdx + 1),
+              currentField: rule.type === "folder" ? "📁" : (rule.field ?? rule.type),
             })
             nonOrphanNodes.push(aggNode)
           }
+
+          // 过滤掉已被当前规则聚合的叶子，供下一条规则使用
+          const currentAggedIds = new Set<SimpleSlug>()
+          for (const [, info] of aggNodeInfoMap.entries()) {
+            if (info.coreId === coreId && info.currentField === (rule.type === "folder" ? "📁" : (rule.field ?? rule.type))) {
+              for (const cn of info.childNodes) currentAggedIds.add(cn.id)
+            }
+          }
+          leavesForNextRule = leavesForNextRule.filter((n) => !currentAggedIds.has(n.id))
         }
       }
 
@@ -1569,74 +1523,99 @@ function main() {
         const aggInfo = aggNodeInfoMap.get(nodeId)
         const rawChildren = aggNodeToChildNodes.get(nodeId) ?? []
 
-        // 多级聚合：若还有 remainingFields，动态跳过无效字段
-        if (aggInfo && aggInfo.remainingFields.length > 0) {
+        // 多级聚合：若还有 remainingRules，按规则顺序执行
+        if (aggInfo && aggInfo.remainingRules.length > 0) {
           const childNodes = rawChildren.filter((n) => !graphData.nodes.some((gn) => gn.id === n.id))
 
           if (childNodes.length > 0) {
-            // 动态查找第一个对当前子节点集合有效的聚合字段
-            let effectiveFieldIdx = -1
+            // 按 remainingRules 顺序执行，找到第一个有效的规则
+            let effectiveRuleIdx = -1
             let effectiveGroupMap: Map<string, NodeData[]> | null = null
-            let effectiveFieldName = ""
+            let effectiveRule: AggregationRule | null = null
 
-            for (let i = 0; i < aggInfo.remainingFields.length; i++) {
-              const field = aggInfo.remainingFields[i]
-              const fieldName = field.field
-              const granularity = field.granularity
+            for (let i = 0; i < aggInfo.remainingRules.length; i++) {
+              const rule = aggInfo.remainingRules[i]
               const groupMap = new Map<string, NodeData[]>()
               let hasValidValue = false
 
               for (const leaf of childNodes) {
                 const details = contentData.get(leaf.id)
-                let fieldValue: string | undefined
+                let groupKey: string | null = null
 
                 if (details) {
-                  if (fieldName === "date") {
-                    const dateStr = (details as any).frontmatter?.date ?? (details as any).date
+                  if (rule.type === "folder") {
+                    const parts = String(leaf.id).split("/")
+                    const depth = rule.depth ?? 1
+                    if (parts.length > 1) {
+                      const folderParts = depth > 1
+                        ? parts.slice(0, Math.min(depth, parts.length - 1))
+                        : [parts[0]]
+                      groupKey = folderParts.join("/")
+                    } else {
+                      groupKey = "/"
+                    }
+                  } else if (rule.type === "date") {
+                    const field = rule.field || "date"
+                    const dateStr = (details as any).frontmatter?.[field] ?? (details as any).date
                     if (dateStr) {
                       const d = new Date(dateStr)
                       if (!isNaN(d.getTime())) {
-                        if (granularity === "year") fieldValue = `${d.getFullYear()}`
-                        else if (granularity === "month") fieldValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-                        else if (granularity === "quarter") fieldValue = `${d.getFullYear()} Q${Math.floor(d.getMonth() / 3) + 1}`
+                        hasValidValue = true
+                        const y = d.getFullYear()
+                        const m = d.getMonth() + 1
+                        if (rule.granularity === "year") groupKey = `${y}年`
+                        else if (rule.granularity === "month") groupKey = `${y}年${m}月`
+                        else if (rule.granularity === "quarter") groupKey = `${y}-Q${Math.ceil(m / 3)}`
+                        else groupKey = `${y}年${m}月`
                       }
                     }
-                  } else {
-                    const rawValue = (details as any).frontmatter?.[fieldName]
+                  } else if (rule.type === "field") {
+                    const field = rule.field ?? ""
+                    const rawValue = (details as any).frontmatter?.[field]
                     // 多级聚合中跳过数组字段
-                    if (!Array.isArray(rawValue) && rawValue) {
-                      fieldValue = String(rawValue)
+                    if (!Array.isArray(rawValue) && rawValue !== undefined && rawValue !== null) {
+                      hasValidValue = true
+                      groupKey = String(rawValue)
                     }
                   }
                 }
 
-                if (fieldValue) {
-                  hasValidValue = true
+                if (rule.type !== "folder" && !groupKey) {
+                  groupKey = "(无)"
                 }
-                const key = fieldValue ?? "(无)"
-                const group = groupMap.get(key) ?? []
-                group.push(leaf)
-                groupMap.set(key, group)
+                if (groupKey !== null) {
+                  const group = groupMap.get(groupKey) ?? []
+                  group.push(leaf)
+                  groupMap.set(groupKey, group)
+                }
               }
 
-              // 若至少有一个节点有有效值，则该字段有效
-              if (hasValidValue) {
-                effectiveFieldIdx = i
-                effectiveGroupMap = groupMap
-                effectiveFieldName = fieldName
-                break
+              // folder 规则：单分组跳过；field/date 规则：没有有效值则跳过
+              if (rule.type === "folder") {
+                if (groupMap.size <= 1) continue
+              } else {
+                if (!hasValidValue || groupMap.size === 0) continue
               }
+
+              effectiveRuleIdx = i
+              effectiveGroupMap = groupMap
+              effectiveRule = rule
+              break
             }
 
-            if (effectiveFieldIdx >= 0 && effectiveGroupMap) {
-              // 使用第一个有效字段创建子聚合节点
-              const remainingFieldsAfter = aggInfo.remainingFields.slice(effectiveFieldIdx + 1)
+            if (effectiveRuleIdx >= 0 && effectiveGroupMap && effectiveRule) {
+              // 使用第一个有效规则创建子聚合节点
+              const remainingRulesAfter = aggInfo.remainingRules.slice(effectiveRuleIdx + 1)
+              const displayPrefix = effectiveRule.type === "folder" ? "📁 " : ""
               for (const [groupKey, groupLeaves] of effectiveGroupMap) {
-                const subAggId = `agg:sub:${nodeId}:${effectiveFieldName}:${groupKey}` as SimpleSlug
+                const displayKey = effectiveRule.type === "folder" && groupKey === "/"
+                  ? "📁 根目录"
+                  : `${displayPrefix}${groupKey}`
+                const subAggId = `agg:sub:${nodeId}:${effectiveRule.type}:${effectiveRule.field ?? ""}:${groupKey}` as SimpleSlug
                 const collapsedR = Math.min(24, Math.max(12, 2 + Math.sqrt(groupLeaves.length)))
                 const subAggNode: NodeData = {
                   id: subAggId,
-                  text: groupKey,
+                  text: displayKey,
                   tags: [],
                   isCore: false,
                   isAggregation: true,
@@ -1648,7 +1627,7 @@ function main() {
                 const subAggLink: LinkData = {
                   source: subAggNode,
                   target: aggInfo.node,
-                  sourceField: effectiveFieldName,
+                  sourceField: effectiveRule.type === "folder" ? "📁" : (effectiveRule.field ?? effectiveRule.type),
                 }
 
                 aggToCoreMap.set(subAggId, nodeId)
@@ -1659,15 +1638,15 @@ function main() {
                   coreId: nodeId,
                   childNodes: groupLeaves,
                   childLinks: [],
-                  remainingFields: remainingFieldsAfter,
-                  currentField: effectiveFieldName,
+                  remainingRules: remainingRulesAfter,
+                  currentField: effectiveRule.type === "folder" ? "📁" : (effectiveRule.field ?? effectiveRule.type),
                 })
 
                 edgeNodesToAdd.push(subAggNode)
                 edgeLinksToAdd.push(subAggLink)
               }
             } else {
-              // 所有剩余字段都无效，直接显示原始叶子
+              // 所有剩余规则都无效，直接显示原始叶子
               edgeNodesToAdd = childNodes
             }
           }
@@ -1687,7 +1666,7 @@ function main() {
       // 判断是否为直接包含叶子的聚合节点（最后一级，或展开后无子聚合节点）
       const aggInfo = isAggNode ? aggNodeInfoMap.get(nodeId) : undefined
       const hasSubAggNodes = edgeNodesToAdd.some((n) => n.isAggregation)
-      const isLeafAggNode = isAggNode && (!aggInfo || aggInfo.remainingFields.length === 0 || !hasSubAggNodes)
+      const isLeafAggNode = isAggNode && (!aggInfo || aggInfo.remainingRules.length === 0 || !hasSubAggNodes)
 
       if (isLeafAggNode && parentNode?.x !== undefined && parentNode?.y !== undefined) {
         // 叶子聚合节点展开：创建放大背景圆圈，子节点沿内部均匀分布
