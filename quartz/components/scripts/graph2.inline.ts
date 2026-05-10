@@ -1793,7 +1793,8 @@ function main() {
 
       simulation.nodes(graphData.nodes)
       simulation.force("link", forceLink(graphData.links).distance(linkDistance))
-      simulation.alpha(isLeafAggNode ? 0.005 : 0.005).restart()
+      // 叶子聚合节点展开时用较高 alpha 让布局快速收敛到正确位置
+      simulation.alpha(isLeafAggNode ? 0.3 : 0.2).restart()
     }
 
     function collapseNode(nodeId: SimpleSlug) {
