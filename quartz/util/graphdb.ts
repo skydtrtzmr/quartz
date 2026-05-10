@@ -309,6 +309,7 @@ export class GraphDatabase {
 
   /**
    * 影响分析：查找受变化影响的节点
+   * [OPTIMIZE] 使用分批处理避免 SQLite 参数数量限制
    */
   analyzeImpact(changedSlugs: string[]): ImpactAnalysis {
     if (changedSlugs.length === 0) {
@@ -324,46 +325,55 @@ export class GraphDatabase {
     const affectedByTags = new Set<string>()
     const affectedByBacklinks = new Set<string>()
 
-    const placeholders = changedSlugs.map(() => '?').join(',')
+    // SQLite 参数限制通常为 999 或 32767，每批最多 500 个参数（留有余量）
+    const BATCH_SIZE = 250
 
-    // 1. 链接影响（双向）
-    const linkAffected = this.db.prepare(`
-      SELECT DISTINCT 
-        CASE 
-          WHEN source IN (${placeholders}) THEN target
-          WHEN target IN (${placeholders}) THEN source
-        END as affected
-      FROM edges
-      WHERE type = 'link' AND (source IN (${placeholders}) OR target IN (${placeholders}))
-    `).all(...changedSlugs, ...changedSlugs) as { affected: string }[]
+    // 分批处理
+    for (let i = 0; i < changedSlugs.length; i += BATCH_SIZE) {
+      const batch = changedSlugs.slice(i, i + BATCH_SIZE)
+      const placeholders = batch.map(() => '?').join(',')
+      // 参数只需要 2 组：1 组用于 CASE，1 组用于 WHERE
+      const params = [...batch, ...batch]
 
-    linkAffected.forEach(({ affected }) => {
-      if (affected) affectedByLinks.add(affected)
-    })
+      // 1. 链接影响（双向）
+      const linkAffected = this.db.prepare(`
+        SELECT DISTINCT 
+          CASE 
+            WHEN source IN (${placeholders}) THEN target
+            WHEN target IN (${placeholders}) THEN source
+          END as affected
+        FROM edges
+        WHERE type = 'link' AND (source IN (${placeholders}) OR target IN (${placeholders}))
+      `).all(...params) as { affected: string }[]
 
-    // 2. 标签影响
-    const tagAffected = this.db.prepare(`
-      SELECT DISTINCT target as affected
-      FROM edges
-      WHERE type = 'tag' AND source IN (${placeholders})
-    `).all(...changedSlugs) as { affected: string }[]
+      linkAffected.forEach(({ affected }) => {
+        if (affected) affectedByLinks.add(affected)
+      })
 
-    tagAffected.forEach(({ affected }) => affectedByTags.add(affected))
+      // 2. 标签影响
+      const tagAffected = this.db.prepare(`
+        SELECT DISTINCT target as affected
+        FROM edges
+        WHERE type = 'tag' AND source IN (${placeholders})
+      `).all(...batch) as { affected: string }[]
 
-    // 3. 反向链接影响
-    const backlinkAffected = this.db.prepare(`
-      SELECT DISTINCT 
-        CASE 
-          WHEN source IN (${placeholders}) THEN target
-          WHEN target IN (${placeholders}) THEN source
-        END as affected
-      FROM edges
-      WHERE type = 'link' AND (source IN (${placeholders}) OR target IN (${placeholders}))
-    `).all(...changedSlugs, ...changedSlugs) as { affected: string }[]
+      tagAffected.forEach(({ affected }) => affectedByTags.add(affected))
 
-    backlinkAffected.forEach(({ affected }) => {
-      if (affected) affectedByBacklinks.add(affected)
-    })
+      // 3. 反向链接影响（与链接影响逻辑相同，取并集）
+      const backlinkAffected = this.db.prepare(`
+        SELECT DISTINCT 
+          CASE 
+            WHEN source IN (${placeholders}) THEN target
+            WHEN target IN (${placeholders}) THEN source
+          END as affected
+        FROM edges
+        WHERE type = 'link' AND (source IN (${placeholders}) OR target IN (${placeholders}))
+      `).all(...params) as { affected: string }[]
+
+      backlinkAffected.forEach(({ affected }) => {
+        if (affected) affectedByBacklinks.add(affected)
+      })
+    }
 
     // 汇总所有受影响的节点
     const allAffected = new Set([

@@ -13,12 +13,11 @@ import {
   simplifySlug,
   SimpleSlug,
 } from "../../util/path"
-import { defaultListPageLayout, sharedPageComponents } from "../../../quartz.layout"
+import { defaultListPageLayout, sharedPageComponents, virtualNodePageLayout } from "../../../quartz.layout"
 import VirtualNodeContent from "../../components/pages/VirtualNodeContent"
 import { write } from "./helpers"
 import { BuildCtx } from "../../util/ctx"
 import { StaticResources } from "../../util/resources"
-import * as Component from "../../components"
 
 // quartz/plugins/emitters/virtualNodePage.tsx
 
@@ -132,7 +131,7 @@ async function processVirtualNodePage(
 export const VirtualNodePage: QuartzEmitterPlugin<Partial<FullPageLayout>> = (userOpts) => {
   const opts: FullPageLayout = {
     ...sharedPageComponents,
-    ...defaultListPageLayout,
+    ...virtualNodePageLayout,
     pageBody: VirtualNodeContent(),
     ...userOpts,
   }

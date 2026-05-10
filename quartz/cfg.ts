@@ -56,6 +56,15 @@ export type Analytics =
       host?: string
     }
 
+export interface GraphConfig {
+  /** 是否预计算局部图谱（构建时生成） */
+  precomputeLocal?: boolean
+  /** 预计算的深度（1 或 2） */
+  localDepth?: number
+  /** 预计算文件缺失时是否回退到 BFS 计算 */
+  fallbackToBfs?: boolean
+}
+
 export interface GlobalConfiguration {
   pageTitle: string
   pageTitleSuffix?: string
@@ -83,6 +92,8 @@ export interface GlobalConfiguration {
    * Region Codes: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
    */
   locale: ValidLocale
+  /** Graph visualization configuration */
+  graph?: GraphConfig
 }
 
 export interface QuartzConfig {

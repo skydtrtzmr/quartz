@@ -8,6 +8,10 @@ import { i18n } from "../i18n"
 import { FileTrieNode } from "../util/fileTrie"
 import OverflowListFactory from "./OverflowList"
 import { concatenateResources } from "../util/resources"
+import {
+  SortConfig,
+  applySortDefaults,
+} from "../util/sort"
 
 // 从 baseUrl 提取子路径（如 "127.0.0.1:8767/xm" -> "xm"）
 function getBasePath(baseUrl: string | undefined): string {
@@ -19,6 +23,103 @@ function getBasePath(baseUrl: string | undefined): string {
     // 如果不是完整 URL，直接返回（去掉开头的 /）
     return baseUrl.replace(/^\//, "").replace(/\/.*$/, "")
   }
+}
+
+// ===== Explorer2 排序辅助函数 =====
+// 生成自包含的 sortFn 代码字符串，用于序列化到浏览器端执行
+
+/**
+ * 生成自包含的排序函数代码
+ * 返回的函数不依赖任何外部变量，可安全序列化
+ */
+function generateSortFnCode(config: SortConfig): string {
+  const cfg = applySortDefaults(config)
+  const multiplier = cfg.order === "asc" ? "1" : "-1"
+  const { type, field = "title" } = cfg
+
+  // 生成字符串字段提取代码
+  function getStringValueCode(prefix: "a" | "b"): string {
+    const node = prefix
+    if (field === "title" || field === "displayName") {
+      return `${node}.displayName`
+    }
+    if (field === "slug") {
+      return `(${node}.slugSegment ?? "")`
+    }
+    // 其他字段从 data.frontmatter 中获取
+    return `((${node}.data && ${node}.data.frontmatter && ${node}.data.frontmatter["${field}"]) ? String(${node}.data.frontmatter["${field}"]) : "")`
+  }
+
+  const valA = getStringValueCode("a")
+  const valB = getStringValueCode("b")
+
+  // 生成日期字段提取代码
+  const dateValA = `(function(node) {
+    var fm = node.data && node.data.frontmatter;
+    var df = fm && fm["${field}"];
+    if (df !== undefined && df !== null) {
+      var dt = new Date(df);
+      if (!isNaN(dt.getTime())) return dt;
+      console.warn('[Explorer2] field ' + '${field}' + ' is not a date, fallback to dates.date');
+    }
+    var d = node.data && node.data.dates;
+    if (d) {
+      if (d.date) return d.date;
+      return d.modified;
+    }
+    return null;
+  })(a)`
+
+  const dateValB = dateValA.replace(/\(a\)/g, "(b)")
+
+  // 生成数值字段提取代码
+  const numValA = `(function(node) {
+    var fm = node.data && node.data.frontmatter;
+    var raw = fm && fm["${field}"];
+    if (raw !== undefined && raw !== null) {
+      var n = Number(raw);
+      if (!isNaN(n)) return n;
+    }
+    return 0;
+  })(a)`
+
+  const numValB = numValA.replace(/\(a\)/g, "(b)")
+
+  let compareCode = ""
+
+  switch (type) {
+    case "date":
+      compareCode = `
+        var da = ${dateValA}, db = ${dateValB};
+        if (da === null && db === null) return 0;
+        if (da === null) return 1;
+        if (db === null) return -1;
+        var r = (da.getTime() - db.getTime()) * ${multiplier};
+        if (r !== 0) return r;
+        return a.displayName.localeCompare(b.displayName, undefined, {numeric: true, sensitivity: 'base'});
+      `
+      break
+    case "numeric":
+      compareCode = `
+        var na = ${numValA}, nb = ${numValB};
+        var r = (na - nb) * ${multiplier};
+        if (r !== 0) return r;
+        return a.displayName.localeCompare(b.displayName, undefined, {numeric: true, sensitivity: 'base'});
+      `
+      break
+    case "natural":
+      compareCode = `return ${valA}.localeCompare(${valB}, undefined, {numeric: true, sensitivity: 'base'}) * ${multiplier};`
+      break
+    case "lexical":
+      compareCode = `return ${valA}.localeCompare(${valB}) * ${multiplier};`
+      break
+  }
+
+  return `(function(a, b) {
+    if (a.isFolder && !b.isFolder) return -1;
+    if (!a.isFolder && b.isFolder) return 1;
+    ${compareCode}
+  })`
 }
 
 type OrderEntries = "sort" | "filter" | "map"
@@ -36,6 +137,8 @@ export interface Options {
     virtualScrollThreshold: number  // 当文件夹内文件数超过此阈值时启用虚拟滚动（默认200）
     virtualScrollWindowSize: number  // 虚拟滚动窗口大小：同时渲染的文件数量（默认50）
     stickyHeaders: boolean  // 吸顶效果：滚动时父级文件夹标题吸附在顶部
+    // 排序配置
+    sort?: SortConfig
     sortFn: (a: FileTrieNode, b: FileTrieNode) => number
     filterFn: (node: FileTrieNode) => boolean
     mapFn: (node: FileTrieNode) => void
@@ -87,7 +190,16 @@ export type FolderState = {
 
 let numExplorers = 0
 export default ((userOpts?: Partial<Options>) => {
-    const opts: Options = { ...defaultOptions, ...userOpts }
+    const options: Options = {
+        ...defaultOptions,
+        ...userOpts,
+    }
+
+    // 如果传入了 sort 配置，生成自包含的 sortFn 代码字符串
+    const sortFnCode = options.sort
+        ? generateSortFnCode(options.sort)
+        : options.sortFn.toString()
+
     const { OverflowList, overflowListAfterDOMLoaded } = OverflowListFactory()
 
     const Explorer3: QuartzComponent = ({ cfg, displayClass }: QuartzComponentProps) => {
@@ -97,21 +209,21 @@ export default ((userOpts?: Partial<Options>) => {
         return (
             <div
                 class={classNames(displayClass, "explorer3")}
-                data-behavior={opts.folderClickBehavior}
-                data-collapsed={opts.folderDefaultState}
-                data-savestate={opts.useSavedState}
-                data-accordion={opts.accordionMode}
-                data-lazyload={opts.lazyLoad}
-                data-renderthreshold={opts.renderThreshold}
-                data-virtualscrollthreshold={opts.virtualScrollThreshold}
-                data-virtualscrollwindowsize={opts.virtualScrollWindowSize}
-                data-stickyheaders={opts.stickyHeaders}
+                data-behavior={options.folderClickBehavior}
+                data-collapsed={options.folderDefaultState}
+                data-savestate={options.useSavedState}
+                data-accordion={options.accordionMode}
+                data-lazyload={options.lazyLoad}
+                data-renderthreshold={options.renderThreshold}
+                data-virtualscrollthreshold={options.virtualScrollThreshold}
+                data-virtualscrollwindowsize={options.virtualScrollWindowSize}
+                data-stickyheaders={options.stickyHeaders}
                 data-basepath={basePath}
                 data-data-fns={JSON.stringify({
-                    order: opts.order,
-                    sortFn: opts.sortFn.toString(),
-                    filterFn: opts.filterFn.toString(),
-                    mapFn: opts.mapFn.toString(),
+                    order: options.order,
+                    sortFn: sortFnCode,
+                    filterFn: options.filterFn.toString(),
+                    mapFn: options.mapFn.toString(),
                 })}
             >
                 <button
@@ -141,7 +253,7 @@ export default ((userOpts?: Partial<Options>) => {
                     data-mobile={false}
                     aria-expanded={true}
                 >
-                    <h2>{opts.title ?? i18n(cfg.locale).components.explorer.title}</h2>
+                    <h2>{options.title ?? i18n(cfg.locale).components.explorer.title}</h2>
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
                         width="14"

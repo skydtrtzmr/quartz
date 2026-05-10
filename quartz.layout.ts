@@ -1,58 +1,110 @@
 import { PageLayout, SharedLayout } from "./quartz/cfg"
 import * as Component from "./quartz/components"
-import { FileTrieNode } from "./quartz/util/fileTrie"
 import fs from "fs"
 import path from "path"
+import { SortConfig } from "./quartz/util/sort"
 
-// TODO ： 写个排序函数构建函数
+// ===== 聚合功能类型定义 =====
+// 与 Backlinks.tsx 保持一致的类型定义
 
-// ===== 预定义排序策略（esbuild 可以静态分析，esbuild 不会尝试解析函数内部逻辑）=====
-//
-// sortBy.key:  "name" | "date"
-// sortBy.order: "asc" | "desc"
-//
-// 文件夹始终优先于文件，与排序策略无关。
-// 对于 date 排序：使用 ContentDetails.date（对应 defaultDateType 配置的日期类型，
-// 默认 "modified"），无日期的节点排在末尾。
-//
-type SortKey = "name" | "date"
-type SortOrder = "asc" | "desc"
+type Granularity = "year" | "month" | "quarter"
 
-interface SortByConfig {
-  key?: SortKey
-  order?: SortOrder
+interface FolderAggregation {
+  depth?: number
+  flatten?: boolean
 }
 
-// ===== 运行时读取 layout.json（fs.readFileSync 对 esbuild 透明）=====
+interface FieldAggregation {
+  type: "field"
+  field: string
+  granularity?: Granularity
+  order: number
+}
+
+// ===== LayoutConfig 接口（从 quartz.layout.json 读取）=====
+// 统一设计：组件名作为第一级，aggregation 作为支持该功能的组件的属性
+
+interface AggregationConfig {
+  folder?: FolderAggregation
+  fields?: FieldAggregation[]
+}
+
 interface LayoutConfig {
   explorer?: {
-    sortBy?: SortByConfig
+    aggregation?: AggregationConfig
+    sort?: SortConfig
   }
   backlinks?: {
     hideWhenEmpty?: boolean
+    aggregation?: AggregationConfig
+    sort?: SortConfig
   }
   folderPage?: {
-    sortBy?: SortByConfig
+    aggregation?: AggregationConfig
+    sort?: SortConfig
+  }
+  graph?: {
+    aggregation?: AggregationConfig
+    colorBy?: string
   }
 }
 
 let layoutCfg: LayoutConfig = {}
-const settingsArg = process.argv.find((a) => a.startsWith("--settings="))
-if (settingsArg) {
-  const settingsPath = settingsArg.split("=").slice(1).join("=")
-  const layoutJsonPath = path.join(settingsPath, "layout.json")
+
+// ===== 读取 layout.json =====
+
+let settingsPath: string | undefined
+const settingsArgIdx = process.argv.findIndex((a) => a === "--settings" || a.startsWith("--settings="))
+if (settingsArgIdx !== -1) {
+  const arg = process.argv[settingsArgIdx]
+  if (arg.startsWith("--settings=")) {
+    settingsPath = arg.split("=").slice(1).join("=")
+  } else if (settingsArgIdx + 1 < process.argv.length) {
+    settingsPath = process.argv[settingsArgIdx + 1]
+  }
+}
+
+if (settingsPath) {
+  // 确保 settingsPath 是目录（去掉末尾的 quartz.layout.json 如果有的话）
+  if (settingsPath.endsWith("quartz.layout.json")) {
+    settingsPath = path.dirname(settingsPath)
+  }
+  const layoutJsonPath = path.join(settingsPath, "quartz.layout.json")
   try {
     const raw = fs.readFileSync(layoutJsonPath, "utf-8")
-    layoutCfg = JSON.parse(raw)
+    layoutCfg = JSON.parse(raw) as LayoutConfig
     console.log(`[settings] 已加载 ${layoutJsonPath}`)
   } catch (e: any) {
     if (e.code !== "ENOENT") {
       console.warn(`[settings] 无法加载 ${layoutJsonPath}：${e.message}`)
+    } else {
+      console.log(`[settings] quartz.layout.json 不存在，使用默认布局`)
     }
   }
 }
 
-const backlinksCfg = { hideWhenEmpty: layoutCfg.backlinks?.hideWhenEmpty ?? false }
+// ===== 从配置生成组件选项 =====
+
+// 统一默认排序配置：当 layout.json 中未指定 sort 时，使用此默认值
+// 所有组件（Explorer、FolderPage、Backlinks）共享同一默认排序
+const defaultSortConfig: SortConfig = { type: "natural", order: "asc", field: "title" }
+
+const backlinksCfg = {
+  hideWhenEmpty: layoutCfg.backlinks?.hideWhenEmpty ?? false,
+  aggregation: layoutCfg.backlinks?.aggregation,
+  sort: layoutCfg.backlinks?.sort ?? defaultSortConfig,
+}
+
+// FolderContent 排序配置（供 folderPage.tsx 使用）
+export const folderPageSort: SortConfig = layoutCfg.folderPage?.sort ?? defaultSortConfig
+
+// Explorer2 排序配置（供 Explorer2.tsx 使用）
+export const explorerSort: SortConfig = layoutCfg.explorer?.sort ?? defaultSortConfig
+
+// Graph 聚合配置（供 Graph.tsx 使用）
+const graphAggregation = layoutCfg.graph?.aggregation ?? undefined
+
+// ===== 组件布局 =====
 
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
@@ -93,11 +145,11 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.Explorer2({
       stickyHeaders: false,
-      // sortFn: explorerSortFn,
+      sort: explorerSort,
     }),
   ],
   right: [
-    Component.Graph(),
+    Component.Graph({ localGraph: { aggregation: graphAggregation }, globalGraph: { aggregation: graphAggregation } }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
   ],
@@ -127,14 +179,24 @@ export const defaultListPageLayout: PageLayout = {
     }),
     Component.Explorer2({
       stickyHeaders: false,
-      // sortFn: explorerSortFn,
+      sort: explorerSort,
     }),
   ],
   right: [
-    Component.Graph(),
+    // 文件夹页不需要关系图谱和反向链接
+    // Component.Graph(),
+    Component.DesktopOnly(Component.TableOfContents()),
+    // Component.Backlinks(backlinksCfg),
+  ],
+}
+
+// 虚拟节点页面布局：基于文件夹页，但需要关系图谱和反向链接
+export const virtualNodePageLayout: PageLayout = {
+  ...defaultListPageLayout,
+  right: [
+    Component.Graph({ localGraph: { aggregation: graphAggregation }, globalGraph: { aggregation: graphAggregation } }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
   ],
 }
-
 

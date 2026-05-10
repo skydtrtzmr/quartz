@@ -16,6 +16,24 @@ function getBasePath(baseUrl: string | undefined): string {
   }
 }
 
+/** 聚合字段配置（与 Backlinks 一致） */
+export interface FieldAggregation {
+  field: string
+  granularity?: "year" | "month" | "quarter"
+  order: number
+}
+
+/** 文件夹聚合配置 */
+export interface FolderAggregation {
+  depth?: number
+}
+
+/** 聚合配置（backlinks / graph 共用） */
+export interface AggregationConfig {
+  folder?: FolderAggregation
+  fields?: FieldAggregation[]
+}
+
 export interface D3Config {
   drag: boolean
   zoom: boolean
@@ -31,6 +49,18 @@ export interface D3Config {
   focusOnHover?: boolean
   enableRadial?: boolean
   showArrows?: boolean
+  /** [CONFIG] 是否显示主节点上的边缘节点数量徽章（仅全局图谱有效）。在 quartz.layout.ts 的 Graph 配置中调整。 */
+  showBadge?: boolean
+  /** [CONFIG] 是否过滤掉没有连接的孤儿节点。在 quartz.layout.ts 的 Graph 配置中调整。 */
+  filterOrphans?: boolean
+  /** [CONFIG] 全局图谱是否默认只显示核心节点，边缘节点点击后展开。在 quartz.layout.ts 的 Graph 配置中调整。 */
+  startCollapsed?: boolean
+  /** [CONFIG] 节点中心数字显示下限（仅全局图谱），关联数小于此值不显示。 */
+  countLabelMin?: number
+  /** [CONFIG] 节点中心数字显示上限，超过显示为 `${上限}+`。 */
+  countLabelMaxDisplay?: number
+  /** [CONFIG] 边缘节点聚合配置。按指定字段将核心节点的邻接边缘节点分组为聚合节点。 */
+  aggregation?: AggregationConfig
 }
 
 interface GraphOptions {
@@ -44,9 +74,10 @@ const defaultOptions: GraphOptions = {
     zoom: true,
     depth: 1,
     scale: 1.1,
-    repelForce: 0.5,
+    // [TUNING] 间距调大，避免节点/长标题重叠
+    repelForce: 0.6,
     centerForce: 0.3,
-    linkDistance: 50,
+    linkDistance: 70,
     fontSize: 0.6,
     opacityScale: 1,
     showTags: true,
@@ -54,15 +85,25 @@ const defaultOptions: GraphOptions = {
     focusOnHover: false,
     enableRadial: false,
     showArrows: true,
+    // [CONFIG] 默认关闭全局图谱节点的数字徽章
+    showBadge: false,
+    // [CONFIG] 局部图谱默认不过滤孤儿节点
+    filterOrphans: false,
+    // [CONFIG] 局部图谱默认全部展开
+    startCollapsed: false,
+    // [CONFIG] 局部图谱默认不显示中心数字
+    countLabelMin: 0,
+    countLabelMaxDisplay: 99,
   },
   globalGraph: {
     drag: true,
     zoom: true,
     depth: -1,
     scale: 0.9,
-    repelForce: 0.5,
+    // [TUNING] 全局图谱节点更分散，长标题不易重叠
+    repelForce: 0.8,
     centerForce: 0.2,
-    linkDistance: 80,
+    linkDistance: 120,
     fontSize: 0.6,
     opacityScale: 1,
     showTags: true,
@@ -70,6 +111,15 @@ const defaultOptions: GraphOptions = {
     focusOnHover: true,
     enableRadial: true,
     showArrows: true,
+    // [CONFIG] 默认关闭全局图谱节点的数字徽章
+    showBadge: false,
+    // [CONFIG] 全局图谱默认过滤孤儿节点
+    filterOrphans: true,
+    // [CONFIG] 全局图谱默认收起边缘节点
+    startCollapsed: true,
+    // [CONFIG] 全局图谱：关联数≥3才显示中心数字，超过99显示99+
+    countLabelMin: 7,
+    countLabelMaxDisplay: 120,
   },
 }
 
@@ -79,7 +129,9 @@ export default ((opts?: Partial<GraphOptions>) => {
     const globalGraph = { ...defaultOptions.globalGraph, ...opts?.globalGraph }
     // [M] 跟Explorer2一样，传basePath给inline用。
     const basePath = getBasePath(cfg.baseUrl)
-    console.log("Graph base:", basePath)
+    // 统一使用 cfg.graph.localDepth 作为预计算深度的配置来源
+    const precomputeDepth = cfg.graph?.localDepth ?? localGraph.depth ?? 1
+    // console.log("Graph base:", basePath)
 
     return (
       <div class={classNames(displayClass, "graph")}>
@@ -89,6 +141,7 @@ export default ((opts?: Partial<GraphOptions>) => {
             class="graph-container"
             data-basepath={basePath}
             data-cfg={JSON.stringify(localGraph)}
+            data-precompute-depth={precomputeDepth}
           ></div>
           <button class="global-graph-icon" aria-label="Global Graph">
             <svg

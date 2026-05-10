@@ -1,6 +1,6 @@
 import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
-import { defaultColors, oceanColors } from "./quartz/themes"
+import { oceanColors } from "./quartz/themes"
 import fs from "fs"
 import path from "path"
 /**
@@ -19,6 +19,11 @@ const config: QuartzConfig = {
     baseUrl: "127.0.0.1:8767/xm",
     ignorePatterns: ["private", "templates", ".obsidian"],
     defaultDateType: "modified",
+    graph: {
+      precomputeLocal: true, // 是否预计算局部图谱（构建时生成）
+      localDepth: 1, // 预计算的深度（1 或 2）
+      fallbackToBfs: true, // 预计算文件缺失时是否回退到 BFS 计算
+    },
     theme: {
       fontOrigin: "local",
       cdnCaching: false,
@@ -67,7 +72,10 @@ const config: QuartzConfig = {
         },
         keepBackground: false,
       }),
-      Plugin.ObsidianFlavoredMarkdown({ enableInHtmlEmbed: false }),
+      Plugin.ObsidianFlavoredMarkdown({
+        parseTags: false, // 禁用从正文提取标签
+        enableInHtmlEmbed: false,
+      }),
       Plugin.GitHubFlavoredMarkdown(),
       Plugin.HardLineBreaks(),
       Plugin.TableOfContents(),
@@ -87,6 +95,11 @@ const config: QuartzConfig = {
         enableSiteMap: true,
         enableRSS: true,
       }),
+      Plugin.GraphLocalEmitter({
+        // depth 已移除，统一使用 quartz.config.ts 中的 graph.localDepth 配置
+        showTags: true,
+        removeTags: [],
+      }),
       Plugin.Assets(),
       Plugin.Static(),
       Plugin.Favicon(),
@@ -103,8 +116,11 @@ const config: QuartzConfig = {
 // JSON 文件中存在的字段以 JSON 为准，其余字段保留 quartz.config.ts 默认值。
 
 // 支持 --settings=<path> 和 --settings <path> 两种格式
+// --settings 参数应该是目录路径
 let settingsPath: string | undefined
-const settingsArgIndex = process.argv.findIndex((a) => a === "--settings" || a.startsWith("--settings="))
+const settingsArgIndex = process.argv.findIndex(
+  (a) => a === "--settings" || a.startsWith("--settings="),
+)
 if (settingsArgIndex !== -1) {
   if (process.argv[settingsArgIndex].startsWith("--settings=")) {
     // --settings=<path> 格式
@@ -116,17 +132,42 @@ if (settingsArgIndex !== -1) {
 }
 
 if (settingsPath) {
-  const configJsonPath = path.join(settingsPath, "config.json")
+  // 确保 settingsPath 是目录（去掉末尾的 .json 文件名如果有的话）
+  if (settingsPath.endsWith(".json")) {
+    settingsPath = path.dirname(settingsPath)
+  }
+  const configJsonPath = path.join(settingsPath, "quartz.config.json")
   try {
     const raw = fs.readFileSync(configJsonPath, "utf-8")
     const override = JSON.parse(raw) as Partial<typeof config.configuration>
-    // 浅合并：只覆盖 configuration 层，不触碰 plugins
-    Object.assign(config.configuration, override)
-    console.log(`[settings] 已加载 ${configJsonPath}，覆盖字段：${Object.keys(override).join(", ")}`)
+    // 深度合并：递归合并嵌套对象（如 graph 配置）
+    deepMerge(config.configuration, override)
+    console.log(
+      `[settings] 已加载 ${configJsonPath}，覆盖字段：${Object.keys(override).join(", ")}`,
+    )
   } catch (e: any) {
     if (e.code !== "ENOENT") {
       // 文件不存在时静默跳过；其他错误（如 JSON 格式错误）打印警告
       console.warn(`[settings] 无法加载 ${configJsonPath}：${e.message}`)
+    }
+  }
+}
+
+// 深度合并函数
+function deepMerge(target: any, source: any): void {
+  for (const key in source) {
+    if (source.hasOwnProperty(key)) {
+      if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
+        // 如果目标对象没有该属性，创建一个空对象
+        if (!target.hasOwnProperty(key)) {
+          target[key] = {}
+        }
+        // 递归合并嵌套对象
+        deepMerge(target[key], source[key])
+      } else {
+        // 直接赋值（覆盖）
+        target[key] = source[key]
+      }
     }
   }
 }

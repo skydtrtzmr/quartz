@@ -1,0 +1,47 @@
+[2026-04-14T06:40:07.996Z] settingsArg: --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:40:07.997Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-cli.mjs build --sqlite --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2 -d E:/ProgramProjects/VScode_projects/quartz-fullstack/input/xm2 -o E:/ProgramProjects/VScode_projects/quartz-fullstack/output/xm2
+[2026-04-14T06:40:07.998Z] settingsPath: E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:40:07.998Z] layoutJsonPath: E:\ProgramProjects\VScode_projects\quartz-fullstack\settings\xm2\layout.json
+[2026-04-14T06:40:07.998Z] layoutCfg loaded successfully
+[2026-04-14T06:40:07.999Z] layoutCfg.aggregation: {"backlinks":{"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}}
+[2026-04-14T06:40:07.999Z] backlinksCfg.aggregation: {"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}
+[2026-04-14T06:41:11.156Z] settingsArg: --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:41:11.157Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-cli.mjs build --sqlite --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2 -d E:/ProgramProjects/VScode_projects/quartz-fullstack/input/xm2 -o E:/ProgramProjects/VScode_projects/quartz-fullstack/output/xm2
+[2026-04-14T06:41:11.158Z] settingsPath: E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:41:11.158Z] layoutJsonPath: E:\ProgramProjects\VScode_projects\quartz-fullstack\settings\xm2\layout.json
+[2026-04-14T06:41:11.159Z] layoutCfg loaded successfully
+[2026-04-14T06:41:11.159Z] layoutCfg.aggregation: {"backlinks":{"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}}
+[2026-04-14T06:41:11.159Z] backlinksCfg.aggregation: {"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}
+[2026-04-14T06:47:04.406Z] settingsArg: --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:47:04.407Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-cli.mjs build --sqlite --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2 -d E:/ProgramProjects/VScode_projects/quartz-fullstack/input/xm2 -o E:/ProgramProjects/VScode_projects/quartz-fullstack/output/xm2
+[2026-04-14T06:47:04.407Z] settingsPath: E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:47:04.408Z] layoutJsonPath: E:\ProgramProjects\VScode_projects\quartz-fullstack\settings\xm2\layout.json
+[2026-04-14T06:47:04.408Z] layoutCfg loaded successfully
+[2026-04-14T06:47:04.408Z] layoutCfg.aggregation: {"backlinks":{"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}}
+[2026-04-14T06:47:04.408Z] backlinksCfg.aggregation: {"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}
+[2026-04-14T06:47:32.683Z] settingsArg: --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:47:32.684Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-cli.mjs build --sqlite --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2 -d E:/ProgramProjects/VScode_projects/quartz-fullstack/input/xm2 -o E:/ProgramProjects/VScode_projects/quartz-fullstack/output/xm2
+[2026-04-14T06:47:32.684Z] settingsPath: E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:47:32.684Z] layoutJsonPath: E:\ProgramProjects\VScode_projects\quartz-fullstack\settings\xm2\layout.json
+[2026-04-14T06:47:32.685Z] layoutCfg loaded successfully
+[2026-04-14T06:47:32.685Z] layoutCfg.aggregation: {"backlinks":{"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}}
+[2026-04-14T06:47:32.685Z] backlinksCfg.aggregation: {"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}
+[2026-04-14T06:47:42.928Z] settingsArg: --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:47:42.930Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-cli.mjs build --sqlite --settings=E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2 -d E:/ProgramProjects/VScode_projects/quartz-fullstack/input/xm2 -o E:/ProgramProjects/VScode_projects/quartz-fullstack/output/xm2
+[2026-04-14T06:47:42.930Z] settingsPath: E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2
+[2026-04-14T06:47:42.930Z] layoutJsonPath: E:\ProgramProjects\VScode_projects\quartz-fullstack\settings\xm2\layout.json
+[2026-04-14T06:47:42.931Z] layoutCfg loaded successfully
+[2026-04-14T06:47:42.931Z] layoutCfg.aggregation: {"backlinks":{"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}}
+[2026-04-14T06:47:42.931Z] backlinksCfg.aggregation: {"folder":{},"fields":[{"field":"date","granularity":"year","order":1},{"field":"tags","order":2}]}
+[2026-04-14T06:59:24.076Z] settingsArg: undefined
+[2026-04-14T06:59:24.078Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-cli.mjs build --sqlite --reset --settings E:/ProgramProjects/VScode_projects/quartz-fullstack/settings/xm2 -d E:/ProgramProjects/VScode_projects/quartz-fullstack/input/xm2 -o E:/ProgramProjects/VScode_projects/quartz-fullstack/output/xm2
+[2026-04-14T06:59:24.078Z] No --settings parameter found
+[2026-04-14T06:59:24.078Z] backlinksCfg.aggregation: undefined
+[2026-04-14T06:59:25.596Z] settingsArg: undefined
+[2026-04-14T06:59:25.596Z] settingsArg: undefined
+[2026-04-14T06:59:25.596Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-worker.mjs
+[2026-04-14T06:59:25.596Z] argv: C:\Dev\IDE\nodejs\node.exe E:\ProgramProjects\VScode_projects\quartz-fullstack\client\quartz\bootstrap-worker.mjs
+[2026-04-14T06:59:25.597Z] No --settings parameter found
+[2026-04-14T06:59:25.597Z] No --settings parameter found
+[2026-04-14T06:59:25.597Z] backlinksCfg.aggregation: undefined
+[2026-04-14T06:59:25.597Z] backlinksCfg.aggregation: undefined

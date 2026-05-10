@@ -34,6 +34,7 @@ export interface BuildCtx {
   trie?: FileTrieNode<BuildTimeTrieData>
   incremental: boolean
   graphDb?: GraphDatabase  // SQLite 图谱数据库
+  affectedSlugs?: Set<string>  // 增量构建中受链接变化影响的 slug（SimpleSlug）
 }
 
 export function trieFromAllFiles(allFiles: QuartzPluginData[]): FileTrieNode<BuildTimeTrieData> {

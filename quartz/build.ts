@@ -472,9 +472,28 @@ async function buildQuartzIncremental(argv: Argv, mut: Mutex, clientRefresh: () 
     }),
   ]
 
+  // 计算受影响节点（用于反向链接等增量更新）
+  const rawIds = [...changedFilePaths, ...deletedFilePaths].map((fp) =>
+    fp.replace(/\.md$/, ""),
+  )
+
+  // 更新前：基于旧边分析
+  const beforeAffected = graphDb.analyzeImpact(rawIds).allAffected
+
   // 更新图谱数据库
   perf.addEvent("update-graph")
   updateGraphDatabase(graphDb, parsedFiles, deletedFilePaths)
+
+  // 更新后：基于新边分析
+  const afterAffected = graphDb.analyzeImpact(rawIds).allAffected
+
+  // 合并新旧状态的受影响节点，排除直接变更的文件自身，转为 slug
+  ctx.affectedSlugs = new Set(
+    [...new Set([...beforeAffected, ...afterAffected])]
+      .filter((id) => !rawIds.includes(id))
+      .map((id) => slugifyFilePath((id + ".md") as FilePath)),
+  )
+  console.log(`Affected slugs: ${ctx.affectedSlugs.size}`)
 
   // 更新 mtime（只有 entity 类型的节点有 mtime）
   for (const [_tree, file] of parsedFiles) {

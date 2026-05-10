@@ -11,13 +11,14 @@ li.section-li {
 
   & > .section {
     display: grid;
-    grid-template-columns: fit-content(8em) 3fr 1fr;
+    // grid-template-columns: 3fr 1fr fit-content(16em); // 旧：标题 + 标签 + 日期
+    grid-template-columns: 1fr fit-content(16em);
 
-    @media all and ($mobile) {
-      & > .tags {
-        display: none;
-      }
-    }
+    // @media all and ($mobile) {
+    //   & > .tags {
+    //     display: none;
+    //   }
+    // }
 
     & > .desc > h3 > a {
       background-color: transparent;
@@ -28,13 +29,19 @@ li.section-li {
       opacity: 0.6;
     }
   }
+
+  // 文件夹项：加粗
+  &.folder-item > .section > .desc > h3 > a {
+    font-weight: 700;
+  }
+
+  // 文件项：正常字重
+  &.file-item > .section > .desc > h3 > a {
+    font-weight: 400;
+  }
 }
 
 // modifications in popover context
 .popover .section {
-  grid-template-columns: fit-content(8em) 1fr !important;
-
-  & > .tags {
-    display: none;
-  }
+  grid-template-columns: 1fr fit-content(16em) !important;
 }

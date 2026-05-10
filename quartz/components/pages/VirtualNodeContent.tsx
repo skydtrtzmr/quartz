@@ -1,6 +1,6 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "../types"
 import { QuartzPluginData } from "../../plugins/vfile"
-import { simplifySlug } from "../../util/path"
+import { FullSlug, resolveRelative, simplifySlug } from "../../util/path"
 
 const VirtualNodeContent: QuartzComponent = ({ fileData, allFiles }: QuartzComponentProps) => {
   const slug = simplifySlug(fileData.slug!)
@@ -30,7 +30,7 @@ const VirtualNodeContent: QuartzComponent = ({ fileData, allFiles }: QuartzCompo
           <ul class="backlinks-list">
             {backlinks.map((file: QuartzPluginData) => (
               <li key={file.slug}>
-                <a href={`/${file.slug}`}>{file.frontmatter?.title || file.slug}</a>
+                <a href={resolveRelative(slug as FullSlug, file.slug as FullSlug)}>{file.frontmatter?.title || file.slug}</a>
               </li>
             ))}
           </ul>

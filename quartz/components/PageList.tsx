@@ -112,13 +112,11 @@ export const PageList: QuartzComponent = ({ cfg, fileData, allFiles, limit, sort
       {displayList.map((page) => {
         const title = page.frontmatter?.title
         const tags = page.frontmatter?.tags ?? []
+        const isFolder = isFolderPath(page.slug ?? "")
 
         return (
-          <li class="section-li">
+          <li class={`section-li${isFolder ? " folder-item" : " file-item"}`}>
             <div class="section">
-              <p class="meta">
-                {page.dates && <Date date={getDate(cfg, page)!} locale={cfg.locale} />}
-              </p>
               <div class="desc">
                 <h3>
                   <a href={resolveRelative(fileData.slug!, page.slug!)} class="internal">
@@ -126,7 +124,7 @@ export const PageList: QuartzComponent = ({ cfg, fileData, allFiles, limit, sort
                   </a>
                 </h3>
               </div>
-              <ul class="tags">
+              {/* <ul class="tags">
                 {tags.map((tag) => (
                   <li>
                     <a
@@ -137,7 +135,10 @@ export const PageList: QuartzComponent = ({ cfg, fileData, allFiles, limit, sort
                     </a>
                   </li>
                 ))}
-              </ul>
+              </ul> */}
+              <p class="meta">
+                {page.dates && <Date date={getDate(cfg, page)!} locale={cfg.locale} />}
+              </p>
             </div>
           </li>
         )

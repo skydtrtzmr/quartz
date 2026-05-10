@@ -109,12 +109,15 @@ export const ContentPage: QuartzEmitterPlugin<Partial<FullPageLayout>> = (userOp
         }
       }
 
+      const affectedSlugs = ctx.affectedSlugs ?? new Set()
+
       for (const [tree, file] of content) {
         const slug = file.data.slug!
-        if (!changedSlugs.has(slug)) continue
         if (slug.endsWith("/index") || slug.startsWith("tags/")) continue
 
-        yield processContent(ctx, tree, file.data, allFiles, opts, resources)
+        if (changedSlugs.has(slug) || affectedSlugs.has(slug)) {
+          yield processContent(ctx, tree, file.data, allFiles, opts, resources)
+        }
       }
     },
   }

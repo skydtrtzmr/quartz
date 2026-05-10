@@ -20,6 +20,14 @@ import { registerEscapeHandler, removeAllChildren } from "./util"
 import { FullSlug, SimpleSlug, getFullSlug, resolveRelative, simplifySlug } from "../../util/path"
 import { D3Config } from "../Graph"
 
+// ============ v5 世代计数器机制 ============
+// 用于防止异步渲染竞态：新导航会递增世代，旧渲染检测到世代变化会自我废弃
+let renderGeneration = 0
+
+function checkGeneration(gen: number): boolean {
+  return gen === renderGeneration
+}
+
 type GraphicsInfo = {
   color: string
   gfx: Graphics
@@ -68,10 +76,17 @@ type TweenNode = {
   stop: () => void
 }
 
-async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
+// ============ 修改：添加 generation 参数 ============
+async function renderGraph(graph: HTMLElement, fullSlug: FullSlug, generation: number): Promise<() => void> {
   const slug = simplifySlug(fullSlug)
   const visited = getVisited()
   removeAllChildren(graph)
+
+  // 检查点 0: 初始检查
+  if (!checkGeneration(generation)) {
+    console.log("[Graph] Stale render (initial check), skipping")
+    return () => {}
+  }
 
   let {
     drag: enableDrag,
@@ -96,6 +111,12 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     ]),
   )
 
+  // 检查点 1: fetchData 完成后
+  if (!checkGeneration(generation)) {
+    console.log("[Graph] Stale render (after fetchData), skipping")
+    return () => {}
+  }
+
   // 加载虚拟节点索引
   let virtualNodeData: Map<SimpleSlug, { title: string; links: SimpleSlug[]; content: string }> = new Map()
   try {
@@ -108,6 +129,12 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     }
   } catch (e) {
     // 虚拟节点索引文件不存在，忽略
+  }
+
+  // 检查点 2: 虚拟节点索引加载后
+  if (!checkGeneration(generation)) {
+    console.log("[Graph] Stale render (after virtual index), skipping")
+    return () => {}
   }
 
   const links: SimpleLinkData[] = []
@@ -174,12 +201,20 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     virtualNodeData.forEach((_, virtualSlug) => neighbourhood.add(virtualSlug))
   }
 
-  const nodes = [...neighbourhood].map((url) => {
+  const width = graph.offsetWidth
+  const height = Math.max(graph.offsetHeight, 250)
+
+  const nodes: NodeData[] = [...neighbourhood].map((url) => {
     const text = url.startsWith("tags/") ? "#" + url.substring(5) : (data.get(url)?.title ?? virtualNodeData.get(url)?.title ?? url)
     return {
       id: url,
       text,
       tags: data.get(url)?.tags ?? [],
+      // 设置随机初始位置，避免单个节点停留在左上角
+      x: (Math.random() - 0.5) * width * 0.5,
+      y: (Math.random() - 0.5) * height * 0.5,
+      vx: 0,
+      vy: 0,
     }
   })
   const graphData: { nodes: NodeData[]; links: LinkData[] } = {
@@ -192,8 +227,11 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       })),
   }
 
-  const width = graph.offsetWidth
-  const height = Math.max(graph.offsetHeight, 250)
+  // 检查点 3: 初始化 Pixi 前
+  if (!checkGeneration(generation)) {
+    console.log("[Graph] Stale render (before Pixi init), skipping")
+    return () => {}
+  }
 
   // we virtualize the simulation and use pixi to actually render it
   const simulation: Simulation<NodeData, LinkData> = forceSimulation<NodeData>(graphData.nodes)
@@ -392,6 +430,15 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     resolution: window.devicePixelRatio,
     eventMode: "static",
   })
+
+  // 检查点 4: Pixi 初始化完成后
+  if (!checkGeneration(generation)) {
+    console.log("[Graph] Stale render (after Pixi init), destroying app")
+    app.destroy()
+    simulation.stop()
+    return () => {}
+  }
+
   graph.appendChild(app.canvas)
 
   const stage = app.stage
@@ -556,7 +603,10 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
 
   let stopAnimation = false
   function animate(time: number) {
-    if (stopAnimation) return
+    // 检查点 5: 动画循环中检查
+    if (stopAnimation || !checkGeneration(generation)) {
+      return
+    }
     for (const n of nodeRenderData) {
       const { x, y } = n.simulationData
       if (!x || !y) continue
@@ -581,16 +631,24 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   }
 
   requestAnimationFrame(animate)
+  
+  // 返回 cleanup 函数
   return () => {
     stopAnimation = true
+    simulation.stop()
     app.destroy()
   }
 }
 
+// ============ 修改：使用世代计数器的 cleanup 机制 ============
 let localGraphCleanups: (() => void)[] = []
 let globalGraphCleanups: (() => void)[] = []
 
 function cleanupLocalGraphs() {
+  // 关键：递增世代，使进行中的旧渲染自我废弃
+  renderGeneration++
+  console.log(`[Graph] cleanupLocalGraphs, new generation: ${renderGeneration}`)
+  
   for (const cleanup of localGraphCleanups) {
     cleanup()
   }
@@ -604,16 +662,33 @@ function cleanupGlobalGraphs() {
   globalGraphCleanups = []
 }
 
+// ============ 修改：监听 prenav 进行提前清理 ============
+document.addEventListener("prenav", () => {
+  console.log("[Graph] prenav event, cleaning up")
+  cleanupLocalGraphs()
+  cleanupGlobalGraphs()
+})
+
 document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
   const slug = e.detail.url
   addToVisited(simplifySlug(slug))
 
+  // ============ 修改：使用世代计数器 ============
   async function renderLocalGraph() {
-    cleanupLocalGraphs()
+    const thisGeneration = renderGeneration
+    console.log(`[Graph] renderLocalGraph starting, generation: ${thisGeneration}`)
+    
     const localGraphContainers = document.getElementsByClassName("graph-container")
     for (const container of localGraphContainers) {
-      localGraphCleanups.push(await renderGraph(container as HTMLElement, slug))
+      const cleanup = await renderGraph(container as HTMLElement, slug, thisGeneration)
+      
+      // 只有世代匹配才注册 cleanup
+      if (cleanup && thisGeneration === renderGeneration) {
+        localGraphCleanups.push(cleanup)
+      }
     }
+    
+    console.log(`[Graph] renderLocalGraph completed, generation: ${thisGeneration}, current: ${renderGeneration}`)
   }
 
   await renderLocalGraph()
@@ -628,7 +703,9 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
 
   const containers = [...document.getElementsByClassName("global-graph-outer")] as HTMLElement[]
   async function renderGlobalGraph() {
+    const thisGeneration = renderGeneration
     const slug = getFullSlug(window)
+    
     for (const container of containers) {
       container.classList.add("active")
       const sidebar = container.closest(".sidebar") as HTMLElement
@@ -639,7 +716,10 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
       const graphContainer = container.querySelector(".global-graph-container") as HTMLElement
       registerEscapeHandler(container, hideGlobalGraph)
       if (graphContainer) {
-        globalGraphCleanups.push(await renderGraph(graphContainer, slug))
+        const cleanup = await renderGraph(graphContainer, slug, thisGeneration)
+        if (cleanup && thisGeneration === renderGeneration) {
+          globalGraphCleanups.push(cleanup)
+        }
       }
     }
   }

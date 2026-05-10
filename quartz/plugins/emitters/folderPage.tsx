@@ -14,7 +14,7 @@ import {
   pathToRoot,
   simplifySlug,
 } from "../../util/path"
-import { defaultListPageLayout, sharedPageComponents } from "../../../quartz.layout"
+import { defaultListPageLayout, sharedPageComponents, folderPageSort } from "../../../quartz.layout"
 import { FolderContent } from "../../components"
 import { write } from "./helpers"
 import { i18n, TRANSLATIONS } from "../../i18n"
@@ -104,7 +104,7 @@ export const FolderPage: QuartzEmitterPlugin<Partial<FolderPageOptions>> = (user
   const opts: FullPageLayout = {
     ...sharedPageComponents,
     ...defaultListPageLayout,
-    pageBody: FolderContent({ sort: userOpts?.sort }),
+    pageBody: FolderContent({ sort: folderPageSort }),
     ...userOpts,
   }
 
@@ -147,9 +147,7 @@ export const FolderPage: QuartzEmitterPlugin<Partial<FolderPageOptions>> = (user
       yield* processFolderInfo(ctx, folderInfo, allFiles, opts, resources)
     },
     async *partialEmit(ctx, content, resources, changeEvents) {
-      
       const allFiles = content.map((c) => c[1].data)
-      
       const cfg = ctx.cfg.configuration
 
       // Find all folders that need to be updated based on changed files
@@ -158,6 +156,24 @@ export const FolderPage: QuartzEmitterPlugin<Partial<FolderPageOptions>> = (user
         if (!changeEvent.file) continue
         const slug = changeEvent.file.data.slug!
         const folders = _getFolders(slug).filter(
+          (folderName) => folderName !== "." && folderName !== "tags",
+        )
+        folders.forEach((folder) => affectedFolders.add(folder))
+      }
+
+      // Add folders affected by backlink / link changes
+      const affectedSlugs = ctx.affectedSlugs ?? new Set()
+      for (const slug of affectedSlugs) {
+        // 1. If the affected slug itself is a folder (has children files), add it
+        const isFolder = allFiles.some(
+          (f) => f.slug && f.slug !== slug && f.slug.startsWith(slug + "/"),
+        )
+        if (isFolder) {
+          affectedFolders.add(slug as SimpleSlug)
+        }
+
+        // 2. Also add parent folders of the affected slug
+        const folders = _getFolders(slug as FullSlug).filter(
           (folderName) => folderName !== "." && folderName !== "tags",
         )
         folders.forEach((folder) => affectedFolders.add(folder))

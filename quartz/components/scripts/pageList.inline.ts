@@ -39,30 +39,30 @@ function setupPageListBatchLoad() {
           const fragment = document.createDocumentFragment()
           for (const page of batch) {
             const li = document.createElement("li")
-            li.className = "section-li"
+            // TODO: 判断文件夹项需要后端在 BatchPageData 中增加 isFolder 字段
+            li.className = "section-li file-item"
 
             const dateHtml = page.dateStr
               ? `<p class="meta"><time datetime="">${page.dateStr}</time></p>`
               : `<p class="meta"></p>`
 
-            const tagsHtml = page.tags.length
-              ? `<ul class="tags">${page.tags
-                  .map((tag) => {
-                    const tagHref = resolveRelative(currentSlug as FullSlug, `tags/${tag}` as FullSlug)
-                    return `<li><a class="internal tag-link" href="${tagHref}">${tag}</a></li>`
-                  })
-                  .join("")}</ul>`
-              : `<ul class="tags"></ul>`
+            // const tagsHtml = page.tags.length
+            //   ? `<ul class="tags">${page.tags
+            //       .map((tag) => {
+            //         const tagHref = resolveRelative(currentSlug as FullSlug, `tags/${tag}` as FullSlug)
+            //         return `<li><a class="internal tag-link" href="${tagHref}">${tag}</a></li>`
+            //       })
+            //       .join("")}</ul>`
+            //   : `<ul class="tags"></ul>`
 
             const pageHref = resolveRelative(currentSlug as FullSlug, page.slug as FullSlug)
 
             li.innerHTML = `
               <div class="section">
-                ${dateHtml}
                 <div class="desc">
                   <h3><a href="${pageHref}" class="internal">${page.title}</a></h3>
                 </div>
-                ${tagsHtml}
+                ${dateHtml}
               </div>
             `
             fragment.appendChild(li)
