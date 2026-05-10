@@ -1837,6 +1837,29 @@ function main() {
         }
       }
 
+      // 辅助：清理聚合节点的展开状态（gfx 样式、aggBg、expanded 标记等）
+      function cleanupAggNodeState(aggNodeData: NodeData) {
+        if (!aggNodeData.isAggregation) return
+        aggNodeData.isExpanded = false
+        aggNodeData.aggExpandedRadius = undefined
+        expandedNodeIds.delete(aggNodeData.id)
+        expandedAggChildren.delete(aggNodeData.id)
+        const rd = nodeRenderData.find((r) => r.simulationData.id === aggNodeData.id)
+        if (rd) {
+          if (rd.aggBg) {
+            rd.aggBg.destroy()
+            rd.aggBg = undefined
+            rd.aggExpandedRadius = undefined
+          }
+          rd.gfx.clear()
+          const r = aggNodeData.aggCollapsedRadius ?? 14
+          rd.gfx.circle(0, 0, r).fill({ color: computedStyleMap["--secondary"], alpha: 0.08 })
+          rd.gfx.circle(0, 0, r).stroke({ width: 2, color: computedStyleMap["--secondary"], alpha: 0.4 })
+          rd.gfx.circle(0, 0, r - 4).stroke({ width: 1, color: computedStyleMap["--secondary"], alpha: 0.2 })
+          rd.gfx.hitArea = new Circle(0, 0, r + 8)
+        }
+      }
+
       for (const edgeNode of nodesToRemove) {
         let stillReferenced = false
         for (const expandedId of expandedNodeIds) {
@@ -1850,6 +1873,9 @@ function main() {
           }
         }
         if (stillReferenced) continue
+
+        // 若移除的是聚合节点，先清理其展开状态
+        cleanupAggNodeState(edgeNode)
 
         const renderIdx = nodeRenderData.findIndex((r) => r.simulationData.id === edgeNode.id)
         if (renderIdx !== -1) {
