@@ -905,14 +905,14 @@ function main() {
               if (ni.aggExpandedRadius && expandedAggChildren.get(ni.id)?.has(nj.id)) continue
               if (nj.aggExpandedRadius && expandedAggChildren.get(nj.id)?.has(ni.id)) continue
 
-              const rj = nodeRadius(nj) + 8
+              const rj = nodeRadius(nj) + 12
               let dx = ni.x - nj.x
               let dy = ni.y - nj.y
               let dist = Math.sqrt(dx * dx + dy * dy) || 1
               const minDist = ri + rj
 
               if (dist < minDist) {
-                const push = (minDist - dist) / dist * 0.5
+                const push = (minDist - dist) / dist * 0.8
                 ni.vx = (ni.vx ?? 0) + dx * push
                 ni.vy = (ni.vy ?? 0) + dy * push
                 nj.vx = (nj.vx ?? 0) - dx * push
