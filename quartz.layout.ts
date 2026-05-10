@@ -3,31 +3,10 @@ import * as Component from "./quartz/components"
 import fs from "fs"
 import path from "path"
 import { SortConfig } from "./quartz/util/sort"
-
-// ===== 聚合功能类型定义 =====
-// 与 Backlinks.tsx 保持一致的类型定义
-
-type Granularity = "year" | "month" | "quarter"
-
-interface FolderAggregation {
-  depth?: number
-  flatten?: boolean
-}
-
-interface FieldAggregation {
-  type: "field"
-  field: string
-  granularity?: Granularity
-  order: number
-}
+import { AggregationConfig } from "./quartz/util/aggregation"
 
 // ===== LayoutConfig 接口（从 quartz.layout.json 读取）=====
 // 统一设计：组件名作为第一级，aggregation 作为支持该功能的组件的属性
-
-interface AggregationConfig {
-  folder?: FolderAggregation
-  fields?: FieldAggregation[]
-}
 
 interface LayoutConfig {
   explorer?: {

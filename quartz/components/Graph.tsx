@@ -4,6 +4,7 @@ import script from "./scripts/graph2.inline"
 import style from "./styles/graph.scss"
 import { i18n } from "../i18n"
 import { classNames } from "../util/lang"
+import { AggregationConfig } from "../util/aggregation"
 
 function getBasePath(baseUrl: string | undefined): string {
   if (!baseUrl) return ""
@@ -14,24 +15,6 @@ function getBasePath(baseUrl: string | undefined): string {
     // 如果不是完整 URL，直接返回（去掉开头的 /）
     return baseUrl.replace(/^\//, "").replace(/\/.*$/, "")
   }
-}
-
-/** 聚合字段配置（与 Backlinks 一致） */
-export interface FieldAggregation {
-  field: string
-  granularity?: "year" | "month" | "quarter"
-  order: number
-}
-
-/** 文件夹聚合配置 */
-export interface FolderAggregation {
-  depth?: number
-}
-
-/** 聚合配置（backlinks / graph 共用） */
-export interface AggregationConfig {
-  folder?: FolderAggregation
-  fields?: FieldAggregation[]
 }
 
 export interface D3Config {

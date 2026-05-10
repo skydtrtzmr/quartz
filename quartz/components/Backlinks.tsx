@@ -9,26 +9,7 @@ import {
 // @ts-ignore
 import script from "./scripts/backlinks.inline"
 
-// ===== 聚合功能类型定义 =====
-
-type Granularity = "year" | "month" | "quarter"
-
-interface FieldAggregation {
-  type: "field"
-  field: string
-  granularity?: Granularity
-  order: number
-}
-
-interface FolderAggregation {
-  depth?: number
-  flatten?: boolean
-}
-
-interface AggregationConfig {
-  folder?: FolderAggregation
-  fields?: FieldAggregation[]
-}
+import { AggregationConfig } from "../util/aggregation"
 
 export interface BacklinksOptions {
   hideWhenEmpty: boolean
@@ -145,7 +126,7 @@ export default ((opts?: Partial<BacklinksOptions>) => {
           class="backlinks-list"
           data-current-slug={fileData.slug}
           data-threshold={threshold}
-          data-aggregation={JSON.stringify(options.aggregation || {})}
+          data-aggregation={JSON.stringify(options.aggregation ?? [])}
           data-basepath={basePath}
           data-hide-empty={options.hideWhenEmpty ? "true" : "false"}
           data-sort-fn={sortFnCode}
@@ -198,7 +179,7 @@ export default ((opts?: Partial<BacklinksOptions>) => {
         
         const currentSlug = list.dataset.currentSlug
         const threshold = parseInt(list.dataset.threshold || "20")
-        const aggConfig = JSON.parse(list.dataset.aggregation || "{}")
+        const rules = JSON.parse(list.dataset.aggregation || "[]")
         const basePath = list.dataset.basepath || ""
         const hideWhenEmpty = list.dataset.hideEmpty !== "false"
         const sortFn = list.dataset.sortFn ? new Function('return ' + list.dataset.sortFn)() : null
@@ -252,7 +233,7 @@ export default ((opts?: Partial<BacklinksOptions>) => {
           }
           
           // 构建树
-          const root = buildTree(backlinks, aggConfig, sortFn)
+          const root = buildTree(backlinks, rules, sortFn)
           renderTree(list, root, currentSlug, threshold)
           
         } catch (err) {
@@ -265,118 +246,108 @@ export default ((opts?: Partial<BacklinksOptions>) => {
         }
       }
       
-      function buildTree(items, aggConfig, sortFn) {
+      function buildTree(items, rules, sortFn) {
         const root = { key: '/', fullPath: '', items: [], children: [], isFieldGroup: false }
         
-        if (!aggConfig || (!aggConfig.folder && (!aggConfig.fields || aggConfig.fields.length === 0))) {
+        if (!rules || rules.length === 0) {
           root.items = items
           if (sortFn) root.items.sort(sortFn)
           return root
         }
         
-        const folderConfig = aggConfig.folder
-        const hasFolder = folderConfig && (folderConfig.depth === undefined || folderConfig.depth > 0)
-        
-        // 按文件夹分组
-        if (hasFolder) {
-          const folderDepth = folderConfig.depth || 1
-          const groups = new Map()
-          for (const item of items) {
-            const parts = item.slug.split('/')
-            // 根据 depth 截取文件夹路径
-            let folder
-            if (parts.length > 1) {
-              const folderParts = folderDepth > 1 ? parts.slice(0, Math.min(folderDepth, parts.length - 1)) : [parts[0]]
-              folder = folderParts.join('/')
-            } else {
-              folder = '/'
-            }
-            if (!groups.has(folder)) groups.set(folder, [])
-            groups.get(folder).push(item)
-          }
-          
-          const sortedFolders = Array.from(groups.keys()).sort((a, b) => {
-            if (a === '/') return 1
-            if (b === '/') return -1
-            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
-          })
-          
-          for (const folder of sortedFolders) {
-            const folderItems = groups.get(folder)
-            const node = { 
-              key: folder === '/' ? '(根目录)' : folder, 
-              fullPath: folder === '/' ? '' : folder, 
-              items: [], 
-              children: [], 
-              isFieldGroup: false 
-            }
-            
-            // 按字段分组（支持多级递归）
-            if (aggConfig.fields && aggConfig.fields.length > 0) {
-              const sortedFields = [...aggConfig.fields].sort((a, b) => a.order - b.order)
-              applyFieldGrouping(node, folderItems, sortedFields, 0, sortFn)
-            } else {
-              node.items = folderItems
-              if (sortFn) node.items.sort(sortFn)
-            }
-            
-            root.children.push(node)
-          }
-        } else if (aggConfig.fields && aggConfig.fields.length > 0) {
-          // 纯字段分组（folder.depth=0 或无 folder 配置）
-          const sortedFields = [...aggConfig.fields].sort((a, b) => a.order - b.order)
-          applyFieldGrouping(root, items, sortedFields, 0, sortFn)
-        }
-        
+        applyAggregationRecursive(root, items, rules, 0, sortFn)
         return root
       }
       
-      // 递归多级字段分组
-      function applyFieldGrouping(parentNode, items, sortedFields, fieldIndex, sortFn) {
-        if (fieldIndex >= sortedFields.length) {
+      // 递归应用聚合规则
+      function applyAggregationRecursive(parentNode, items, sortedRules, ruleIndex, sortFn) {
+        if (ruleIndex >= sortedRules.length) {
           parentNode.items = items
           if (sortFn) parentNode.items.sort(sortFn)
           return
         }
         
-        const field = sortedFields[fieldIndex]
-        const fieldGroups = new Map()
+        const rule = sortedRules[ruleIndex]
+        
+        // 检查规则是否有效（是否至少有一个 item 能提取出有效键）
+        let hasValid = false
         for (const item of items) {
-          let val = item.frontmatter?.[field.field]
-          if (val === undefined || val === null) {
-            val = '(无)'
-          } else if (Array.isArray(val)) {
-            val = val[0]
+          const key = extractGroupKeyRuntime(item, rule)
+          if (key !== null) {
+            hasValid = true
+            break
           }
-          val = formatDateByGranularity(val, field.granularity)
-          
-          if (!fieldGroups.has(val)) fieldGroups.set(val, [])
-          fieldGroups.get(val).push(item)
         }
         
-        // 如果全部归入(无)，说明该字段在数据中完全不存在，跳过此级聚合，尝试下一个字段
-        if (fieldGroups.size === 1 && fieldGroups.has('(无)')) {
-          applyFieldGrouping(parentNode, items, sortedFields, fieldIndex + 1, sortFn)
+        // 全部无效则跳过此级，尝试下一规则
+        if (!hasValid) {
+          applyAggregationRecursive(parentNode, items, sortedRules, ruleIndex + 1, sortFn)
           return
         }
         
-        const sortedVals = Array.from(fieldGroups.keys()).sort((a, b) => {
+        // 执行分组
+        const groups = new Map()
+        for (const item of items) {
+          const key = extractGroupKeyRuntime(item, rule) ?? '(无)'
+          if (!groups.has(key)) groups.set(key, [])
+          groups.get(key).push(item)
+        }
+        
+        const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
           if (a === '(无)') return 1
           if (b === '(无)') return -1
           return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
         })
         
-        for (const fieldVal of sortedVals) {
+        for (const groupKey of sortedKeys) {
+          const groupItems = groups.get(groupKey)
+          const isField = rule.type === 'field' || rule.type === 'date'
           const childNode = {
-            key: fieldVal,
-            fullPath: '',
+            key: groupKey,
+            fullPath: rule.type === 'folder' ? (groupKey === '/' ? '' : groupKey) : '',
             items: [],
             children: [],
-            isFieldGroup: true,
-            fieldName: field.field
+            isFieldGroup: isField,
+            fieldName: isField ? (rule.field || rule.type) : undefined
           }
-          applyFieldGrouping(childNode, fieldGroups.get(fieldVal), sortedFields, fieldIndex + 1, sortFn)
+          applyAggregationRecursive(childNode, groupItems, sortedRules, ruleIndex + 1, sortFn)
           parentNode.children.push(childNode)
+        }
+      }
+      
+      // 运行时提取分组键（与 util/aggregation.ts 逻辑保持一致）
+      function extractGroupKeyRuntime(item, rule) {
+        switch (rule.type) {
+          case 'folder': {
+            const parts = (item.slug ?? '').split('/')
+            if (parts.length <= 1) return '/'
+            const depth = rule.depth ?? 1
+            const folderParts = depth > 1 
+              ? parts.slice(0, Math.min(depth, parts.length - 1)) 
+              : [parts[0]]
+            return folderParts.join('/')
+          }
+          case 'field': {
+            const field = rule.field || ''
+            const raw = item.frontmatter?.[field]
+            if (raw === undefined || raw === null) return null
+            if (Array.isArray(raw)) {
+              const first = raw.find(v => v !== undefined && v !== null)
+              return first !== undefined ? String(first) : null
+            }
+            return String(raw)
+          }
+          case 'date': {
+            const field = rule.field || 'date'
+            let raw = item.frontmatter?.[field]
+            if ((raw === undefined || raw === null) && field !== 'date') {
+              raw = item.frontmatter?.['date']
+            }
+            if (raw === undefined || raw === null) return null
+            return formatDateByGranularity(raw, rule.granularity)
+          }
+          default:
+            return null
         }
       }
       
@@ -401,7 +372,7 @@ export default ((opts?: Partial<BacklinksOptions>) => {
         for (const child of node.children) {
           const totalCount = getTotal(child)
           const segKey = child.isFieldGroup && child.fieldName 
-            ? (['date', 'tags'].includes(child.fieldName) ? child.key : child.fieldName + ': ' + child.key)
+            ? (child.fieldName + ': ' + child.key)
             : child.key
           
           const li = document.createElement('li')

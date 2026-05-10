@@ -17,7 +17,8 @@ import { Text, Graphics, Application, Container, Circle } from "pixi.js"
 import { Group as TweenGroup, Tween as Tweened } from "@tweenjs/tween.js"
 import { registerEscapeHandler, removeAllChildren } from "./util"
 import { FullSlug, SimpleSlug, getFullSlug, resolveRelative, simplifySlug } from "../../util/path"
-import { D3Config, FieldAggregation } from "../Graph"
+import { D3Config } from "../Graph"
+import { AggregationRule } from "../../util/aggregation"
 
 // ============ Singleton 守护 ============
 // inline 脚本在每次 SPA 导航后都会重新执行，用模块级标志防止重复初始化
@@ -618,7 +619,7 @@ function main() {
       coreId: SimpleSlug
       childNodes: NodeData[]
       childLinks: LinkData[]
-      remainingFields: FieldAggregation[]
+      remainingRules: AggregationRule[]
       currentField: string
     }
     const aggNodeInfoMap = new Map<SimpleSlug, AggregationNodeInfo>()
