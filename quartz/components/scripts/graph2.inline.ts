@@ -2139,7 +2139,7 @@ function main() {
         const isAgg = l.isAggregation
         const lineW = isAgg ? 0.6 : 1
 
-        // 聚合节点展开时，连线从圆圈边缘发出，体现为"区域连接到核心"
+        // 聚合节点（无论展开/收起）连线从圆圈边缘发出，避免连线穿入节点内部
         let lineX1 = x1, lineY1 = y1
         if (isAgg && ld.source.aggExpandedRadius) {
           const dx = x2 - x1
@@ -2147,6 +2147,12 @@ function main() {
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
           lineX1 = x1 + (dx / dist) * ld.source.aggExpandedRadius
           lineY1 = y1 + (dy / dist) * ld.source.aggExpandedRadius
+        } else if (isAgg && ld.source.aggCollapsedRadius) {
+          const dx = x2 - x1
+          const dy = y2 - y1
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+          lineX1 = x1 + (dx / dist) * ld.source.aggCollapsedRadius
+          lineY1 = y1 + (dy / dist) * ld.source.aggCollapsedRadius
         }
 
         if (showArrows) {
@@ -2195,7 +2201,7 @@ function main() {
         }
 
         if (l.label) {
-          l.label.position.set((x1 + x2) / 2, (y1 + y2) / 2)
+          l.label.position.set((lineX1 + x2) / 2, (lineY1 + y2) / 2)
         }
       }
 
