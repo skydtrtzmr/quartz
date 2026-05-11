@@ -1024,7 +1024,8 @@ function main() {
       .force("collide", createAggAwareCollide())
 
     const radius = (Math.min(width, height) / 2) * 0.8
-    if (enableRadial) simulation.force("radial", forceRadial(radius).strength(0.2))
+    // [TUNING] 全局图谱 radial 强度降低，避免节点被强行推向外围圆周
+    if (enableRadial) simulation.force("radial", forceRadial(radius).strength(0.05))
 
     // 局部图谱使用快速收敛参数
     if (!isGlobalGraph) {
@@ -1033,8 +1034,10 @@ function main() {
         `[DEBUG] 局部图谱：使用快速收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`,
       )
     } else {
+      // [TUNING] 全局图谱增加速度衰减，减少运动惯性，让布局更平滑稳定
+      simulation.velocityDecay(0.6)
       console.log(
-        `[DEBUG] 全局图谱：使用默认收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()})`,
+        `[DEBUG] 全局图谱：使用调优收敛参数 (alphaMin: ${simulation.alphaMin()}, alphaDecay: ${simulation.alphaDecay()}, velocityDecay: ${simulation.velocityDecay()})`,
       )
     }
 
@@ -2012,7 +2015,10 @@ function main() {
           .container(() => app.canvas)
           .subject(() => graphData.nodes.find((n) => n.id === hoveredNodeId))
           .on("start", function dragstarted(event) {
-            if (!event.active) simulation.alphaTarget(1).restart()
+            // 局部图谱保持高活跃，全局图谱温和加热避免大范围抖动
+            if (!event.active) {
+              simulation.alphaTarget(isGlobalGraph ? 0.1 : 1).restart()
+            }
             event.subject.fx = event.subject.x
             event.subject.fy = event.subject.y
             event.subject.__initialDragPos = {
@@ -2031,9 +2037,19 @@ function main() {
           })
           .on("end", function dragended(event) {
             if (!event.active) simulation.alphaTarget(0)
-            event.subject.fx = null
-            event.subject.fy = null
             dragging = false
+
+            if (isGlobalGraph) {
+              // [TUNING] 全局图谱延迟释放固定位置，避免立即 fx=null 被拽走
+              setTimeout(() => {
+                event.subject.fx = null
+                event.subject.fy = null
+              }, 300)
+            } else {
+              // 局部图谱立即释放
+              event.subject.fx = null
+              event.subject.fy = null
+            }
 
             if (Date.now() - dragStartTime < 300) {
               const nodeId = event.subject.id as SimpleSlug

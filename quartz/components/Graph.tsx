@@ -88,9 +88,9 @@ const defaultOptions: GraphOptions = {
     depth: -1,
     scale: 0.9,
     // [TUNING] 全局图谱节点更分散，长标题不易重叠
-    repelForce: 0.8,
-    centerForce: 0.2,
-    linkDistance: 120,
+    repelForce: 1.5,
+    centerForce: 0.4,
+    linkDistance: 150,
     fontSize: 0.6,
     opacityScale: 1,
     showTags: true,
