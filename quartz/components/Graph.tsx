@@ -52,6 +52,8 @@ export interface D3Config {
   regionRules?: AggregationConfig
   /** [CONFIG] 大区展开后是否同时展开内部核心节点。false 时核心节点保持收起，需逐个点击展开。 */
   expandCoresOnRegionOpen?: boolean
+  /** [CONFIG] 全局图谱首屏是否过滤掉不符合 coreNodeFilter 的非核心节点（仅当配置了 coreNodeFilter 时生效）。默认 true。 */
+  filterNonCoreNodes?: boolean
 }
 
 interface GraphOptions {
@@ -113,6 +115,8 @@ const defaultOptions: GraphOptions = {
     countLabelMaxDisplay: 120,
     // [CONFIG] 全局图谱核心节点数量硬上限
     coreNodeLimit: 100,
+    // [CONFIG] 全局图谱首屏过滤非核心节点（配置了 coreNodeFilter 时生效）
+    filterNonCoreNodes: true,
   },
 }
 

@@ -311,6 +311,7 @@ function main() {
       coreNodeLimit: rawCoreNodeLimit,
       regionRules,
       expandCoresOnRegionOpen = true,
+      filterNonCoreNodes = true,
     } = JSON.parse(graph.dataset["cfg"]!) as D3Config
 
     // 全局图谱默认硬上限 100；局部图谱不设上限
@@ -1036,6 +1037,8 @@ function main() {
     if (isGlobalGraph && startCollapsed) {
       if (regionRules && regionRules.length > 0) {
         // [REGION] 大区模式首屏：大区节点 + 跨区叶节点
+        // 若 filterNonCoreNodes 为 true 且配置了 coreNodeFilter，则额外过滤掉不符合核心节点条件的非核心节点
+        const shouldFilterNonCore = filterNonCoreNodes && coreNodeFilter && coreNodeFilter.length > 0
         const crossRegionEdgeIds = new Set<string>()
         for (const edge of edgeNodes) {
           const neighborRegions = new Set<string>()
@@ -1050,7 +1053,15 @@ function main() {
           }
         }
 
-        const visibleNodes = initialNodes.filter((n) => n.isRegion || crossRegionEdgeIds.has(n.id))
+        const visibleNodes = initialNodes.filter((n) => {
+          if (n.isRegion) return true
+          if (crossRegionEdgeIds.has(n.id)) {
+            // 跨区叶节点也要过滤非核心节点
+            if (shouldFilterNonCore && !n.isCore) return false
+            return true
+          }
+          return false
+        })
         const visibleNodeIds = new Set(visibleNodes.map((n) => n.id))
         const visibleLinks = initialLinks.filter(
           (l) => visibleNodeIds.has(l.source.id) && visibleNodeIds.has(l.target.id),
@@ -1059,7 +1070,9 @@ function main() {
         console.log(`[Graph] 大区模式首屏：${visibleNodes.length} 个节点（${regionNodeInfoMap.size} 个大区 + ${crossRegionEdgeIds.size} 个跨区文件）`)
       } else {
         // 全局图谱默认收起：核心节点 + 聚合节点 + 它们之间的链接
-        const visibleNodes = initialNodes.filter((n) => n.isCore || n.isAggregation)
+        // 若 filterNonCoreNodes 为 true 且配置了 coreNodeFilter，则只显示核心节点和聚合节点
+        const shouldFilterNonCore = filterNonCoreNodes && coreNodeFilter && coreNodeFilter.length > 0
+        const visibleNodes = initialNodes.filter((n) => n.isCore || n.isAggregation || (!shouldFilterNonCore && !n.isCore))
         const visibleNodeIds = new Set(visibleNodes.map((n) => n.id))
         const visibleLinks = initialLinks.filter(
           (l) => visibleNodeIds.has(l.source.id) && visibleNodeIds.has(l.target.id),
@@ -1495,10 +1508,6 @@ function main() {
           fill: isRegionNode ? computedStyleMap["--dark"] : computedStyleMap["--tertiary"],
           fontFamily: computedStyleMap["--bodyFont"],
           fontWeight: "bold",
-        }
-        // 大区节点标签默认直接显示
-        if (isRegionNode) {
-          label.alpha = 1
         }
       }
 

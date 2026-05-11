@@ -29,6 +29,7 @@ interface LayoutConfig {
     coreNodeLimit?: number
     regionRules?: AggregationConfig
     expandCoresOnRegionOpen?: boolean
+    filterNonCoreNodes?: boolean
   }
 }
 
@@ -90,6 +91,7 @@ const graphCoreNodeFilter = layoutCfg.graph?.coreNodeFilter ?? undefined
 const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
 const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
 const graphExpandCoresOnRegionOpen = layoutCfg.graph?.expandCoresOnRegionOpen ?? false
+const graphFilterNonCoreNodes = layoutCfg.graph?.filterNonCoreNodes ?? true
 
 // ===== 组件布局 =====
 
@@ -138,7 +140,7 @@ export const defaultContentPageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
@@ -186,7 +188,7 @@ export const virtualNodePageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
