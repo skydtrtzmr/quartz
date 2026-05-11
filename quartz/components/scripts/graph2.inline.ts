@@ -585,10 +585,30 @@ function main() {
     // 标记核心/边缘节点
     if (isGlobalGraph && coreNodeFilter && coreNodeFilter.length > 0) {
       // 规则匹配候选核心节点（全局图谱 + 配置了 coreNodeFilter）
+      console.log("[Graph] coreNodeFilter 规则:", JSON.stringify(coreNodeFilter))
+      let matchedCount = 0
+      const matchSamples: { id: string; folderKey: string; matched: boolean }[] = []
       for (const n of nonOrphanNodes) {
         const details = contentData.get(n.id)
         n.isCore = matchCoreNodeFilter(n.id, details?.frontmatter, coreNodeFilter)
+        if (n.isCore) matchedCount++
+        // 手动计算 folderKey 用于调试
+        const parts = n.id.split("/")
+        const folderKey = parts.length > 1 ? parts[0] : "/"
+        if (matchSamples.length < 20) {
+          matchSamples.push({ id: n.id, folderKey, matched: n.isCore })
+        }
       }
+      console.log(`[Graph] coreNodeFilter 匹配结果: ${matchedCount}/${nonOrphanNodes.length} 个核心节点`)
+      console.log("[Graph] 匹配样例 (前20条):", matchSamples)
+      // 统计各 folderKey 出现次数
+      const folderStats = new Map<string, number>()
+      for (const n of nonOrphanNodes) {
+        const parts = n.id.split("/")
+        const key = parts.length > 1 ? parts[0] : "/"
+        folderStats.set(key, (folderStats.get(key) ?? 0) + 1)
+      }
+      console.log("[Graph] 一级文件夹分布:", Object.fromEntries([...folderStats.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)))
     } else {
       // 未配置 coreNodeFilter 或局部图谱：回退到连接数阈值（全局图谱 >2，局部图谱 >1）
       const threshold = isGlobalGraph ? 2 : 1
@@ -639,8 +659,16 @@ function main() {
       n.isExpanded = false
     }
 
-    // 可聚合边缘节点：仅与一个核心节点相连（单链接），避免多核心归属冲突
-    const singleLinkEdgeNodes = edgeNodes.filter((n) => (nodeLinkCount.get(n.id) ?? 0) === 1)
+    // 计算每个边缘节点连接的核心节点数量（只算核心归属，不算边缘-边缘连接）
+    const edgeToCoreCount = new Map<string, number>()
+    for (const [, nodes] of nodeToEdgeNodes) {
+      for (const node of nodes) {
+        edgeToCoreCount.set(node.id, (edgeToCoreCount.get(node.id) ?? 0) + 1)
+      }
+    }
+
+    // 可聚合边缘节点：仅与一个核心节点相连（单归属），避免多核心归属冲突
+    const singleLinkEdgeNodes = edgeNodes.filter((n) => (edgeToCoreCount.get(n.id) ?? 0) === 1)
     const singleLinkEdgeNodeIds = new Set(singleLinkEdgeNodes.map((n) => n.id))
 
     // ===== 边缘节点聚合 =====
