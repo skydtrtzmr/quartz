@@ -310,6 +310,7 @@ function main() {
       coreNodeFilter,
       coreNodeLimit: rawCoreNodeLimit,
       regionRules,
+      expandCoresOnRegionOpen = true,
     } = JSON.parse(graph.dataset["cfg"]!) as D3Config
 
     // 全局图谱默认硬上限 100；局部图谱不设上限
@@ -623,7 +624,8 @@ function main() {
     }
 
     // [SAFETY] 全局图谱硬上限：无论规则匹配还是回退，核心节点数不能超过上限
-    if (isGlobalGraph && coreNodeLimit && coreNodeLimit > 0) {
+    // 注意：配置了 regionRules 时首屏已按大区聚合，跳过全局硬上限以避免大区计数失真
+    if (isGlobalGraph && coreNodeLimit && coreNodeLimit > 0 && !(regionRules && regionRules.length > 0)) {
       const coreNodes = nonOrphanNodes.filter((n) => n.isCore)
       if (coreNodes.length > coreNodeLimit) {
         coreNodes.sort((a, b) => (nodeLinkCount.get(b.id) ?? 0) - (nodeLinkCount.get(a.id) ?? 0))
@@ -1494,6 +1496,10 @@ function main() {
           fontFamily: computedStyleMap["--bodyFont"],
           fontWeight: "bold",
         }
+        // 大区节点标签默认直接显示
+        if (isRegionNode) {
+          label.alpha = 1
+        }
       }
 
       const gfx = graphicsPool.acquire()
@@ -1590,7 +1596,7 @@ function main() {
             style: {
               fontSize: Math.max(10, r * 0.95),
               fontFamily: computedStyleMap["--bodyFont"],
-              fill: computedStyleMap["--light"],
+              fill: isRegionNode ? computedStyleMap["--dark"] : computedStyleMap["--light"],
               fontWeight: "bold",
             },
             resolution: window.devicePixelRatio * 4,
@@ -1738,18 +1744,21 @@ function main() {
             nodesToAdd.push(core)
           }
 
-          // 加入该核心节点的邻接边缘节点（聚合节点 + 散点）
-          const coreEdgeNodes = nodeToEdgeNodes.get(core.id) ?? []
-          for (const edge of coreEdgeNodes) {
-            if (!graphData.nodes.some((n) => n.id === edge.id)) {
-              nodesToAdd.push(edge)
+          // 仅当 expandCoresOnRegionOpen 为 true 时才同时展开核心节点的边缘节点
+          if (expandCoresOnRegionOpen) {
+            // 加入该核心节点的邻接边缘节点（聚合节点 + 散点）
+            const coreEdgeNodes = nodeToEdgeNodes.get(core.id) ?? []
+            for (const edge of coreEdgeNodes) {
+              if (!graphData.nodes.some((n) => n.id === edge.id)) {
+                nodesToAdd.push(edge)
+              }
             }
-          }
 
-          const coreEdgeLinks = nodeToEdgeLinks.get(core.id) ?? []
-          for (const l of coreEdgeLinks) {
-            if (!graphData.links.some((gl) => gl.source.id === l.source.id && gl.target.id === l.target.id)) {
-              linksToAdd.push(l)
+            const coreEdgeLinks = nodeToEdgeLinks.get(core.id) ?? []
+            for (const l of coreEdgeLinks) {
+              if (!graphData.links.some((gl) => gl.source.id === l.source.id && gl.target.id === l.target.id)) {
+                linksToAdd.push(l)
+              }
             }
           }
 

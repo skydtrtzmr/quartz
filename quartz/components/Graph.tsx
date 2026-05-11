@@ -50,6 +50,8 @@ export interface D3Config {
   coreNodeLimit?: number
   /** [CONFIG] 全局图谱大区聚合规则。配置后首屏先显示大区节点，点击展开才显示内部核心节点。 */
   regionRules?: AggregationConfig
+  /** [CONFIG] 大区展开后是否同时展开内部核心节点。false 时核心节点保持收起，需逐个点击展开。 */
+  expandCoresOnRegionOpen?: boolean
 }
 
 interface GraphOptions {

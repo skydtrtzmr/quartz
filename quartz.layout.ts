@@ -28,6 +28,7 @@ interface LayoutConfig {
     coreNodeFilter?: CoreNodeFilterConfig
     coreNodeLimit?: number
     regionRules?: AggregationConfig
+    expandCoresOnRegionOpen?: boolean
   }
 }
 
@@ -88,6 +89,7 @@ const graphAggregation = layoutCfg.graph?.aggregation ?? undefined
 const graphCoreNodeFilter = layoutCfg.graph?.coreNodeFilter ?? undefined
 const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
 const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
+const graphExpandCoresOnRegionOpen = layoutCfg.graph?.expandCoresOnRegionOpen ?? false
 
 // ===== 组件布局 =====
 
@@ -136,7 +138,7 @@ export const defaultContentPageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
@@ -184,7 +186,7 @@ export const virtualNodePageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
