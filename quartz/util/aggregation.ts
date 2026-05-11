@@ -27,6 +27,61 @@ export interface AggregationRule {
 /** 聚合配置：规则列表 */
 export type AggregationConfig = AggregationRule[]
 
+// ===== 核心节点过滤规则 =====
+
+export interface CoreNodeFilterRule {
+  /** 过滤维度类型 */
+  type: "folder" | "field"
+
+  /** 字段名（field 用，folder 可省略） */
+  field?: string
+
+  /** 文件夹截取深度（仅 folder 有效） */
+  depth?: number
+
+  /** 精确匹配值列表（满足任一值即命中） */
+  values?: string[]
+}
+
+/** 核心节点过滤配置：规则列表，满足任一规则即为核心节点（OR 关系） */
+export type CoreNodeFilterConfig = CoreNodeFilterRule[]
+
+/**
+ * 判断节点是否匹配核心节点过滤规则
+ * @param slug 节点 slug
+ * @param frontmatter 节点 frontmatter
+ * @param rules 过滤规则列表
+ * @returns 是否匹配（OR 关系）
+ */
+export function matchCoreNodeFilter(
+  slug: string,
+  frontmatter: Record<string, unknown> | undefined,
+  rules: CoreNodeFilterConfig | undefined,
+): boolean {
+  if (!rules || rules.length === 0) return false
+
+  for (const rule of rules) {
+    if (rule.type === "folder") {
+      const parts = slug.split("/")
+      if (parts.length <= 1) continue
+      const depth = rule.depth ?? 1
+      const folderParts = depth > 1
+        ? parts.slice(0, Math.min(depth, parts.length - 1))
+        : [parts[0]]
+      const folderKey = folderParts.join("/")
+      if (rule.values?.includes(folderKey)) return true
+    } else if (rule.type === "field") {
+      const field = rule.field ?? ""
+      const raw = frontmatter?.[field]
+      if (raw === undefined || raw === null) continue
+      const value = Array.isArray(raw) ? String(raw[0] ?? "") : String(raw)
+      if (rule.values?.includes(value)) return true
+    }
+  }
+
+  return false
+}
+
 // ===== 公共工具函数 =====
 
 

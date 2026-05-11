@@ -18,7 +18,7 @@ import { Group as TweenGroup, Tween as Tweened } from "@tweenjs/tween.js"
 import { registerEscapeHandler, removeAllChildren } from "./util"
 import { FullSlug, SimpleSlug, getFullSlug, resolveRelative, simplifySlug } from "../../util/path"
 import { D3Config } from "../Graph"
-import { AggregationRule } from "../../util/aggregation"
+import { AggregationRule, matchCoreNodeFilter } from "../../util/aggregation"
 
 // ============ Singleton 守护 ============
 // inline 脚本在每次 SPA 导航后都会重新执行，用模块级标志防止重复初始化
@@ -303,7 +303,12 @@ function main() {
       startCollapsed = false,
       countLabelMaxDisplay = 99,
       aggregation,
+      coreNodeFilter,
+      coreNodeLimit: rawCoreNodeLimit,
     } = JSON.parse(graph.dataset["cfg"]!) as D3Config
+
+    // 全局图谱默认硬上限 100；局部图谱不设上限
+    const coreNodeLimit = depth < 0 ? (rawCoreNodeLimit ?? 100) : rawCoreNodeLimit
 
     basePath = graph.dataset.basepath || ""
 
@@ -411,6 +416,11 @@ function main() {
     }
 
     const isGlobalGraph = depth < 0
+    if (isGlobalGraph) {
+      const source = rawCoreNodeLimit !== undefined ? "配置值" : "默认值"
+      console.log(`[Graph] 全局图谱 coreNodeLimit: ${coreNodeLimit} (${source})`)
+    }
+
     const neighbourhood = new Set<SimpleSlug>()
 
     if (!isGlobalGraph) {
@@ -573,8 +583,30 @@ function main() {
     )
 
     // 标记核心/边缘节点
-    for (const n of nonOrphanNodes) {
-      n.isCore = (nodeLinkCount.get(n.id) ?? 0) > 1
+    if (isGlobalGraph && coreNodeFilter && coreNodeFilter.length > 0) {
+      // 规则匹配候选核心节点（全局图谱 + 配置了 coreNodeFilter）
+      for (const n of nonOrphanNodes) {
+        const details = contentData.get(n.id)
+        n.isCore = matchCoreNodeFilter(n.id, details?.frontmatter, coreNodeFilter)
+      }
+    } else {
+      // 未配置 coreNodeFilter 或局部图谱：回退到连接数阈值（全局图谱 >2，局部图谱 >1）
+      const threshold = isGlobalGraph ? 2 : 1
+      for (const n of nonOrphanNodes) {
+        n.isCore = (nodeLinkCount.get(n.id) ?? 0) > threshold
+      }
+    }
+
+    // [SAFETY] 全局图谱硬上限：无论规则匹配还是回退，核心节点数不能超过上限
+    if (isGlobalGraph && coreNodeLimit && coreNodeLimit > 0) {
+      const coreNodes = nonOrphanNodes.filter((n) => n.isCore)
+      if (coreNodes.length > coreNodeLimit) {
+        coreNodes.sort((a, b) => (nodeLinkCount.get(b.id) ?? 0) - (nodeLinkCount.get(a.id) ?? 0))
+        const selected = new Set(coreNodes.slice(0, coreNodeLimit).map((n) => n.id))
+        for (const n of nonOrphanNodes) {
+          if (!selected.has(n.id)) n.isCore = false
+        }
+      }
     }
 
     const edgeNodes = nonOrphanNodes.filter((n) => !n.isCore)

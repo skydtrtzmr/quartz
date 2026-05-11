@@ -4,7 +4,7 @@ import script from "./scripts/graph2.inline"
 import style from "./styles/graph.scss"
 import { i18n } from "../i18n"
 import { classNames } from "../util/lang"
-import { AggregationConfig } from "../util/aggregation"
+import { AggregationConfig, CoreNodeFilterConfig } from "../util/aggregation"
 
 function getBasePath(baseUrl: string | undefined): string {
   if (!baseUrl) return ""
@@ -44,6 +44,10 @@ export interface D3Config {
   countLabelMaxDisplay?: number
   /** [CONFIG] 边缘节点聚合配置。按指定字段将核心节点的邻接边缘节点分组为聚合节点。 */
   aggregation?: AggregationConfig
+  /** [CONFIG] 全局图谱核心节点过滤规则。满足任一规则的节点标记为核心节点（OR 关系）。 */
+  coreNodeFilter?: CoreNodeFilterConfig
+  /** [CONFIG] 全局图谱核心节点数量硬上限。超过时按连接数降序截取前 N 个。 */
+  coreNodeLimit?: number
 }
 
 interface GraphOptions {
@@ -103,6 +107,8 @@ const defaultOptions: GraphOptions = {
     // [CONFIG] 全局图谱：关联数≥3才显示中心数字，超过99显示99+
     countLabelMin: 7,
     countLabelMaxDisplay: 120,
+    // [CONFIG] 全局图谱核心节点数量硬上限
+    coreNodeLimit: 100,
   },
 }
 

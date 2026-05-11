@@ -3,7 +3,7 @@ import * as Component from "./quartz/components"
 import fs from "fs"
 import path from "path"
 import { SortConfig } from "./quartz/util/sort"
-import { AggregationConfig } from "./quartz/util/aggregation"
+import { AggregationConfig, CoreNodeFilterConfig } from "./quartz/util/aggregation"
 
 // ===== LayoutConfig 接口（从 quartz.layout.json 读取）=====
 // 统一设计：组件名作为第一级，aggregation 作为支持该功能的组件的属性
@@ -25,6 +25,8 @@ interface LayoutConfig {
   graph?: {
     aggregation?: AggregationConfig
     colorBy?: string
+    coreNodeFilter?: CoreNodeFilterConfig
+    coreNodeLimit?: number
   }
 }
 
@@ -82,6 +84,8 @@ export const explorerSort: SortConfig = layoutCfg.explorer?.sort ?? defaultSortC
 
 // Graph 聚合配置（供 Graph.tsx 使用）
 const graphAggregation = layoutCfg.graph?.aggregation ?? undefined
+const graphCoreNodeFilter = layoutCfg.graph?.coreNodeFilter ?? undefined
+const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
 
 // ===== 组件布局 =====
 
@@ -128,7 +132,10 @@ export const defaultContentPageLayout: PageLayout = {
     }),
   ],
   right: [
-    Component.Graph({ localGraph: { aggregation: graphAggregation }, globalGraph: { aggregation: graphAggregation } }),
+    Component.Graph({
+      localGraph: { aggregation: graphAggregation },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit },
+    }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
   ],
@@ -173,7 +180,10 @@ export const defaultListPageLayout: PageLayout = {
 export const virtualNodePageLayout: PageLayout = {
   ...defaultListPageLayout,
   right: [
-    Component.Graph({ localGraph: { aggregation: graphAggregation }, globalGraph: { aggregation: graphAggregation } }),
+    Component.Graph({
+      localGraph: { aggregation: graphAggregation },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit },
+    }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
   ],
