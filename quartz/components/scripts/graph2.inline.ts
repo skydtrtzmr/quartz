@@ -169,6 +169,10 @@ function main() {
     aggChildCount?: number
     /** 聚合节点展开后，子节点相对于聚合中心的目标偏移（用于 tick 强约束） */
     aggTargetOffset?: { x: number; y: number }
+    /** 大区节点标记 */
+    isRegion?: boolean
+    /** 大区节点包含的核心节点 ID 列表 */
+    regionChildIds?: SimpleSlug[]
   } & SimulationNodeDatum
 
   type SimpleLinkData = {
@@ -305,6 +309,7 @@ function main() {
       aggregation,
       coreNodeFilter,
       coreNodeLimit: rawCoreNodeLimit,
+      regionRules,
     } = JSON.parse(graph.dataset["cfg"]!) as D3Config
 
     // 全局图谱默认硬上限 100；局部图谱不设上限
@@ -882,6 +887,82 @@ function main() {
       )
     }
 
+    // ===== 大区节点生成（全局图谱 + 配置了 regionRules）=====
+    const regionNodeInfoMap = new Map<SimpleSlug, { node: NodeData; childCores: NodeData[] }>()
+    const coreToRegionMap = new Map<SimpleSlug, SimpleSlug>()
+
+    if (isGlobalGraph && regionRules && regionRules.length > 0) {
+      const coreNodes = nonOrphanNodes.filter((n) => n.isCore && !n.isAggregation && !n.isRegion)
+      const rule = regionRules[0]
+      const groupMap = new Map<string, NodeData[]>()
+
+      for (const core of coreNodes) {
+        const details = contentData.get(core.id)
+        let groupKey: string | null = null
+
+        if (details) {
+          if (rule.type === "folder") {
+            const parts = String(core.id).split("/")
+            const depth = rule.depth ?? 1
+            if (parts.length > 1) {
+              const folderParts = depth > 1
+                ? parts.slice(0, Math.min(depth, parts.length - 1))
+                : [parts[0]]
+              groupKey = folderParts.join("/")
+            } else {
+              groupKey = "/"
+            }
+          } else if (rule.type === "date") {
+            const field = rule.field || "date"
+            const dateStr = (details as any).frontmatter?.[field] ?? (details as any).date
+            if (dateStr) {
+              const d = new Date(dateStr)
+              if (!isNaN(d.getTime())) {
+                const y = d.getFullYear()
+                const m = d.getMonth() + 1
+                if (rule.granularity === "year") groupKey = `${y}年`
+                else if (rule.granularity === "month") groupKey = `${y}年${m}月`
+                else if (rule.granularity === "quarter") groupKey = `${y}-Q${Math.ceil(m / 3)}`
+                else groupKey = `${y}年${m}月`
+              }
+            }
+          } else if (rule.type === "field") {
+            const field = rule.field ?? ""
+            const rawValue = (details as any).frontmatter?.[field]
+            if (!Array.isArray(rawValue) && rawValue !== undefined && rawValue !== null) {
+              groupKey = String(rawValue)
+            }
+          }
+        }
+
+        if (!groupKey) groupKey = "(未分组)"
+        const group = groupMap.get(groupKey) ?? []
+        group.push(core)
+        groupMap.set(groupKey, group)
+      }
+
+      for (const [groupKey, childCores] of groupMap) {
+        const regionId = `region:${groupKey}` as SimpleSlug
+        const regionNode: NodeData = {
+          id: regionId,
+          text: groupKey,
+          tags: [],
+          isCore: true,
+          isRegion: true,
+          regionChildIds: childCores.map((c) => c.id),
+          edgeNodeCount: childCores.length,
+          aggCollapsedRadius: Math.min(40, Math.max(25, 5 + Math.sqrt(childCores.length) * 3)),
+        }
+        regionNodeInfoMap.set(regionId, { node: regionNode, childCores })
+        for (const c of childCores) {
+          coreToRegionMap.set(c.id, regionId)
+        }
+        nonOrphanNodes.push(regionNode)
+      }
+
+      console.log(`[Graph] 大区聚合完成：${regionNodeInfoMap.size} 个大区，${coreToRegionMap.size} 个核心节点`)
+    }
+
     // 追踪展开的聚合节点与其子节点的映射，用于碰撞检测时跳过父子碰撞
     const expandedAggChildren = new Map<SimpleSlug, Set<SimpleSlug>>()
 
@@ -951,28 +1032,53 @@ function main() {
 
     let graphData: { nodes: NodeData[]; links: LinkData[] }
     if (isGlobalGraph && startCollapsed) {
-      // 全局图谱默认收起：核心节点 + 聚合节点 + 它们之间的链接
-      const visibleNodes = initialNodes.filter((n) => n.isCore || n.isAggregation)
-      const visibleNodeIds = new Set(visibleNodes.map((n) => n.id))
-      const visibleLinks = initialLinks.filter(
-        (l) => visibleNodeIds.has(l.source.id) && visibleNodeIds.has(l.target.id),
-      )
-      // 添加聚合节点到核心节点的边
-      for (const [aggId, info] of aggNodeInfoMap) {
-        const coreId = aggToCoreMap.get(aggId)
-        if (!coreId || !visibleNodeIds.has(coreId)) continue
-        const exists = visibleLinks.some(
-          (l) => (l.source.id === aggId && l.target.id === coreId) || (l.source.id === coreId && l.target.id === aggId),
-        )
-        if (!exists) {
-          visibleLinks.push({
-            source: info.node,
-            target: visibleNodes.find((n) => n.id === coreId)!,
-            sourceField: info.currentField,
-          })
+      if (regionRules && regionRules.length > 0) {
+        // [REGION] 大区模式首屏：大区节点 + 跨区叶节点
+        const crossRegionEdgeIds = new Set<string>()
+        for (const edge of edgeNodes) {
+          const neighborRegions = new Set<string>()
+          for (const l of nonOrphanLinks) {
+            const otherId = l.source.id === edge.id ? l.target.id : l.target.id === edge.id ? l.source.id : null
+            if (otherId && coreToRegionMap.has(otherId)) {
+              neighborRegions.add(coreToRegionMap.get(otherId)!)
+            }
+          }
+          if (neighborRegions.size > 1) {
+            crossRegionEdgeIds.add(edge.id)
+          }
         }
+
+        const visibleNodes = initialNodes.filter((n) => n.isRegion || crossRegionEdgeIds.has(n.id))
+        const visibleNodeIds = new Set(visibleNodes.map((n) => n.id))
+        const visibleLinks = initialLinks.filter(
+          (l) => visibleNodeIds.has(l.source.id) && visibleNodeIds.has(l.target.id),
+        )
+        graphData = { nodes: visibleNodes, links: visibleLinks }
+        console.log(`[Graph] 大区模式首屏：${visibleNodes.length} 个节点（${regionNodeInfoMap.size} 个大区 + ${crossRegionEdgeIds.size} 个跨区文件）`)
+      } else {
+        // 全局图谱默认收起：核心节点 + 聚合节点 + 它们之间的链接
+        const visibleNodes = initialNodes.filter((n) => n.isCore || n.isAggregation)
+        const visibleNodeIds = new Set(visibleNodes.map((n) => n.id))
+        const visibleLinks = initialLinks.filter(
+          (l) => visibleNodeIds.has(l.source.id) && visibleNodeIds.has(l.target.id),
+        )
+        // 添加聚合节点到核心节点的边
+        for (const [aggId, info] of aggNodeInfoMap) {
+          const coreId = aggToCoreMap.get(aggId)
+          if (!coreId || !visibleNodeIds.has(coreId)) continue
+          const exists = visibleLinks.some(
+            (l) => (l.source.id === aggId && l.target.id === coreId) || (l.source.id === coreId && l.target.id === aggId),
+          )
+          if (!exists) {
+            visibleLinks.push({
+              source: info.node,
+              target: visibleNodes.find((n) => n.id === coreId)!,
+              sourceField: info.currentField,
+            })
+          }
+        }
+        graphData = { nodes: visibleNodes, links: visibleLinks }
       }
-      graphData = { nodes: visibleNodes, links: visibleLinks }
     } else {
       // 局部图谱 / 非startCollapsed：过滤掉已被聚合的子节点，加入聚合节点
       // 收集所有被聚合的子节点 ID
@@ -1341,23 +1447,50 @@ function main() {
     )
 
     // ===== 辅助函数：创建节点渲染对象 =====
+    /** 用短线段模拟虚线圆弧 */
+    function drawDashedCircle(gfx: Graphics, cx: number, cy: number, r: number, dash: number, gap: number, strokeColor: string, strokeAlpha: number, strokeWidth: number) {
+      const segments = 120
+      const circumference = 2 * Math.PI * r
+      const dashCount = Math.floor(circumference / (dash + gap))
+      const pointsPerDash = Math.max(2, Math.floor(segments / dashCount))
+      const pointsPerGap = Math.max(1, Math.floor(segments / dashCount * (gap / (dash + gap))))
+
+      for (let i = 0; i < dashCount; i++) {
+        const startIdx = i * (pointsPerDash + pointsPerGap)
+        const dashPoints: { x: number; y: number }[] = []
+        for (let j = 0; j < pointsPerDash; j++) {
+          const idx = (startIdx + j) % segments
+          const angle = (idx / segments) * Math.PI * 2
+          dashPoints.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r })
+        }
+        if (dashPoints.length > 1) {
+          gfx.moveTo(dashPoints[0].x, dashPoints[0].y)
+          for (let k = 1; k < dashPoints.length; k++) {
+            gfx.lineTo(dashPoints[k].x, dashPoints[k].y)
+          }
+        }
+      }
+      gfx.stroke({ width: strokeWidth, color: strokeColor, alpha: strokeAlpha })
+    }
+
     function createNodeRenderObject(n: NodeData): NodeRenderData {
       const nodeId = n.id
       const isTagNode = nodeId.startsWith("tags/")
       const isAggNode = n.isAggregation ?? false
-      const r = isAggNode ? (n.aggCollapsedRadius ?? 14) : nodeRadius(n)
+      const isRegionNode = n.isRegion ?? false
+      const r = isAggNode || isRegionNode ? (n.aggCollapsedRadius ?? 14) : nodeRadius(n)
 
       const label = textPool.acquire()
       label.text = n.text
       label.alpha = 0
       label.scale.set(1 / scale)
 
-      // 聚合节点标签：上方显示，使用 --tertiary 色和更小字号
-      if (isAggNode) {
+      // 聚合节点 / 大区节点标签：上方显示，使用 --tertiary 色和更小字号
+      if (isAggNode || isRegionNode) {
         label.anchor.set(0.5, 0)
         label.style = {
-          fontSize: fontSize * 12,
-          fill: computedStyleMap["--tertiary"],
+          fontSize: fontSize * (isRegionNode ? 14 : 12),
+          fill: isRegionNode ? computedStyleMap["--dark"] : computedStyleMap["--tertiary"],
           fontFamily: computedStyleMap["--bodyFont"],
           fontWeight: "bold",
         }
@@ -1366,7 +1499,11 @@ function main() {
       const gfx = graphicsPool.acquire()
       gfx.label = nodeId
       gfx.hitArea = new Circle(0, 0, r + 8)
-      if (isAggNode) {
+      if (isRegionNode) {
+        // 大区节点：半透明填充 + 虚线边框
+        gfx.circle(0, 0, r).fill({ color: computedStyleMap["--secondary"], alpha: 0.06 })
+        drawDashedCircle(gfx, 0, 0, r, 6, 4, computedStyleMap["--secondary"], 0.5, 2)
+      } else if (isAggNode) {
         // 聚合节点（可展开）：双圆环 + 浅色填充，专属标识
         gfx.circle(0, 0, r).fill({ color: computedStyleMap["--secondary"], alpha: 0.08 })
         gfx.circle(0, 0, r).stroke({ width: 2, color: computedStyleMap["--secondary"], alpha: 0.4 })
@@ -1577,6 +1714,86 @@ function main() {
 
     function expandNode(nodeId: SimpleSlug) {
       if (expandedNodeIds.has(nodeId)) return
+
+      const targetNode = graphData.nodes.find((n) => n.id === nodeId)
+      // [REGION] 大区节点展开：加入内部核心节点及其邻接边缘节点
+      if (targetNode?.isRegion || regionNodeInfoMap.has(nodeId)) {
+        const nodesToAdd: NodeData[] = []
+        const linksToAdd: LinkData[] = []
+
+        // 获取子核心节点列表（优先从 map 取，fallback 从节点属性恢复）
+        let childCores: NodeData[]
+        if (regionNodeInfoMap.has(nodeId)) {
+          childCores = regionNodeInfoMap.get(nodeId)!.childCores
+        } else if (targetNode?.regionChildIds) {
+          childCores = targetNode.regionChildIds
+            .map((id) => allNodes.find((n) => n.id === id)!)
+            .filter(Boolean)
+        } else {
+          childCores = []
+        }
+
+        for (const core of childCores) {
+          if (!graphData.nodes.some((n) => n.id === core.id)) {
+            nodesToAdd.push(core)
+          }
+
+          // 加入该核心节点的邻接边缘节点（聚合节点 + 散点）
+          const coreEdgeNodes = nodeToEdgeNodes.get(core.id) ?? []
+          for (const edge of coreEdgeNodes) {
+            if (!graphData.nodes.some((n) => n.id === edge.id)) {
+              nodesToAdd.push(edge)
+            }
+          }
+
+          const coreEdgeLinks = nodeToEdgeLinks.get(core.id) ?? []
+          for (const l of coreEdgeLinks) {
+            if (!graphData.links.some((gl) => gl.source.id === l.source.id && gl.target.id === l.target.id)) {
+              linksToAdd.push(l)
+            }
+          }
+
+          // 大区→核心链接
+          const regionNodeRef = graphData.nodes.find((n) => n.id === nodeId)!
+          linksToAdd.push({
+            source: regionNodeRef,
+            target: core,
+          })
+        }
+
+        if (nodesToAdd.length > 0 || linksToAdd.length > 0) {
+          graphData.nodes.push(...nodesToAdd)
+          graphData.links.push(...linksToAdd)
+
+          // 给新节点设置初始位置（围绕大区节点）
+          const regionNode = graphData.nodes.find((n) => n.id === nodeId)!
+          const cx = regionNode.x ?? 0
+          const cy = regionNode.y ?? 0
+          for (let i = 0; i < nodesToAdd.length; i++) {
+            const n = nodesToAdd[i]
+            if (n.x == null) {
+              const angle = (i / Math.max(nodesToAdd.length, 1)) * Math.PI * 2
+              const dist = 60 + Math.random() * 40
+              n.x = cx + Math.cos(angle) * dist
+              n.y = cy + Math.sin(angle) * dist
+            }
+          }
+
+          for (const n of nodesToAdd) {
+            nodeRenderData.push(createNodeRenderObject(n))
+          }
+          for (const l of linksToAdd) {
+            linkRenderData.push(createLinkRenderObject(l))
+          }
+
+          simulation.nodes(graphData.nodes)
+          simulation.force("link", forceLink(graphData.links).distance(linkDistance))
+          simulation.alpha(0.3).restart()
+        }
+
+        expandedNodeIds.add(nodeId)
+        return
+      }
 
       const isAggNode = nodeId.startsWith("agg:")
       let edgeNodesToAdd: NodeData[] = []
@@ -1842,6 +2059,70 @@ function main() {
 
     function collapseNode(nodeId: SimpleSlug) {
       if (!expandedNodeIds.has(nodeId)) return
+
+      const targetNode = graphData.nodes.find((n) => n.id === nodeId)
+      // [REGION] 大区节点收起：移除内部核心节点及其所有邻接边缘节点
+      if (targetNode?.isRegion || regionNodeInfoMap.has(nodeId)) {
+        const idsToRemove = new Set<string>()
+
+        // 获取子核心节点列表（优先从 map 取，fallback 从节点属性恢复）
+        let childCores: NodeData[]
+        if (regionNodeInfoMap.has(nodeId)) {
+          childCores = regionNodeInfoMap.get(nodeId)!.childCores
+        } else if (targetNode?.regionChildIds) {
+          childCores = targetNode.regionChildIds
+            .map((id) => allNodes.find((n) => n.id === id)!)
+            .filter(Boolean)
+        } else {
+          childCores = []
+        }
+
+        for (const core of childCores) {
+          idsToRemove.add(core.id)
+          // 收集该核心节点的邻接边缘节点
+          const coreEdgeNodes = nodeToEdgeNodes.get(core.id) ?? []
+          for (const edge of coreEdgeNodes) {
+            idsToRemove.add(edge.id)
+          }
+          // 若核心节点展开了聚合节点，先清理聚合状态
+          if (expandedNodeIds.has(core.id)) {
+            collapseNode(core.id)
+          }
+        }
+
+        graphData.nodes = graphData.nodes.filter((n) => !idsToRemove.has(n.id))
+        graphData.links = graphData.links.filter(
+          (l) => !idsToRemove.has(l.source.id) && !idsToRemove.has(l.target.id),
+        )
+
+        // 清理渲染数据（完整销毁节点关联的所有 Pixi 对象）
+        for (let i = nodeRenderData.length - 1; i >= 0; i--) {
+          const rd = nodeRenderData[i]
+          if (idsToRemove.has(rd.simulationData.id)) {
+            rd.gfx.destroy()
+            rd.label.destroy()
+            if (rd.badge) { rd.badge.destroy(); rd.badge = undefined }
+            if (rd.badgeText) { rd.badgeText.destroy(); rd.badgeText = undefined }
+            if (rd.countLabel) { rd.countLabel.destroy(); rd.countLabel = undefined }
+            if (rd.aggBg) { rd.aggBg.destroy(); rd.aggBg = undefined }
+            nodeRenderData.splice(i, 1)
+          }
+        }
+        for (let i = linkRenderData.length - 1; i >= 0; i--) {
+          const l = linkRenderData[i].simulationData
+          if (idsToRemove.has(l.source.id) || idsToRemove.has(l.target.id)) {
+            linkRenderData[i].gfx.destroy()
+            if (linkRenderData[i].label) linkRenderData[i].label!.destroy()
+            linkRenderData.splice(i, 1)
+          }
+        }
+
+        expandedNodeIds.delete(nodeId)
+        simulation.nodes(graphData.nodes)
+        simulation.force("link", forceLink(graphData.links).distance(linkDistance))
+        simulation.alpha(0.3).restart()
+        return
+      }
 
       // 聚合节点：移除展开的子边缘节点，释放固定位置
       const isAggNode = nodeId.startsWith("agg:")

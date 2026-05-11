@@ -48,6 +48,8 @@ export interface D3Config {
   coreNodeFilter?: CoreNodeFilterConfig
   /** [CONFIG] 全局图谱核心节点数量硬上限。超过时按连接数降序截取前 N 个。 */
   coreNodeLimit?: number
+  /** [CONFIG] 全局图谱大区聚合规则。配置后首屏先显示大区节点，点击展开才显示内部核心节点。 */
+  regionRules?: AggregationConfig
 }
 
 interface GraphOptions {

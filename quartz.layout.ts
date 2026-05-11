@@ -27,6 +27,7 @@ interface LayoutConfig {
     colorBy?: string
     coreNodeFilter?: CoreNodeFilterConfig
     coreNodeLimit?: number
+    regionRules?: AggregationConfig
   }
 }
 
@@ -86,6 +87,7 @@ export const explorerSort: SortConfig = layoutCfg.explorer?.sort ?? defaultSortC
 const graphAggregation = layoutCfg.graph?.aggregation ?? undefined
 const graphCoreNodeFilter = layoutCfg.graph?.coreNodeFilter ?? undefined
 const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
+const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
 
 // ===== 组件布局 =====
 
@@ -134,7 +136,7 @@ export const defaultContentPageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
@@ -182,7 +184,7 @@ export const virtualNodePageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
