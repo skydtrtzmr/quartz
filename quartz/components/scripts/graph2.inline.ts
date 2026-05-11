@@ -675,8 +675,9 @@ function main() {
       }
     }
 
-    // 可聚合边缘节点：仅与一个核心节点相连（单归属），避免多核心归属冲突
-    const singleLinkEdgeNodes = edgeNodes.filter((n) => (edgeToCoreCount.get(n.id) ?? 0) === 1)
+    // 可聚合边缘节点：配置了大区规则时允许多归属节点聚合（每个核心节点独立聚合），否则仅单归属以避免全局视图混乱
+    const hasRegionRules = regionRules && regionRules.length > 0
+    const singleLinkEdgeNodes = edgeNodes.filter((n) => hasRegionRules || (edgeToCoreCount.get(n.id) ?? 0) === 1)
     const singleLinkEdgeNodeIds = new Set(singleLinkEdgeNodes.map((n) => n.id))
 
     // ===== 边缘节点聚合 =====
