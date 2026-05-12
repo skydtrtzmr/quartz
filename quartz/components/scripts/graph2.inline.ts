@@ -1450,6 +1450,7 @@ function main() {
         label.alpha = 0
         label.visible = true
         if (label.parent) label.parent.removeChild(label)
+        label.style.fill = computedStyleMap["--dark"]
       },
     )
     const linkGraphicsPool = new ObjectPool<Graphics>(
