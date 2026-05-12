@@ -2,8 +2,6 @@ import { QuartzEmitterPlugin } from "../types"
 import { FullSlug, SimpleSlug, simplifySlug } from "../../util/path"
 import { write } from "./helpers"
 import { ContentDetails } from "./contentIndex"
-import { createHash } from "crypto"
-
 // TODO 现在这个局部图谱预构建功能，还不支持增量生成。
 
 // LocalGraphEdge 与 graph.inline.ts 中的 SimpleLinkData 对应
@@ -36,11 +34,21 @@ const defaultOptions: Options = {
   removeTags: [],
 }
 
+// 纯 JS djb2 哈希（与 graph2.inline.ts 保持一致，兼容 HTTP 非安全上下文）
+function djb2Hash(message: string): string {
+  let hash = 5381
+  for (let i = 0; i < message.length; i++) {
+    hash = ((hash << 5) + hash) + message.charCodeAt(i)
+    hash = hash & 0xffffffff
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0")
+}
+
 // Get local graph storage path (hierarchical directory)
-// Structure: {sha256(0,2)}/{sha256(2,2)}/{slug}.json
+// Structure: {hash(0,2)}/{hash(2,2)}/{slug}.json
 // slug may contain '/', which creates subdirectories matching the original path structure
 function getLocalGraphPath(slug: SimpleSlug): string {
-  const hash = createHash("sha256").update(slug).digest("hex").slice(0, 4)
+  const hash = djb2Hash(slug).slice(0, 4)
   const dir1 = hash.slice(0, 2)
   const dir2 = hash.slice(2, 4)
   return `${dir1}/${dir2}/${slug}`

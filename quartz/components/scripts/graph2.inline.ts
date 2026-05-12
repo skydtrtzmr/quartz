@@ -82,11 +82,26 @@ declare global {
 // Promise 缓存：key -> Promise<data>
 const localGraphPromiseCache = new Map<string, Promise<any | null>>()
 
+// 纯 JS 实现的 djb2 哈希（替代 sha256，兼容 HTTP 非安全上下文）
+function djb2Hash(message: string): string {
+  let hash = 5381
+  for (let i = 0; i < message.length; i++) {
+    hash = ((hash << 5) + hash) + message.charCodeAt(i)
+    hash = hash & 0xffffffff
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0")
+}
+
+// 保留 sha256 作为安全上下文下的备选（当前未使用）
 async function sha256(message: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(message)
-  const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+  if (typeof crypto !== "undefined" && crypto.subtle) {
+    const msgBuffer = new TextEncoder().encode(message)
+    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+  }
+  // 降级：使用 djb2 哈希（HTTP 非安全上下文）
+  return djb2Hash(message).repeat(8).slice(0, 64)
 }
 
 async function fetchCachedLocalGraph(fullSlug: string, basePath: string): Promise<any | null> {
