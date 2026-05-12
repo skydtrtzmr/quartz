@@ -1510,14 +1510,17 @@ function main() {
           fontFamily: computedStyleMap["--bodyFont"],
           fontWeight: "bold",
         }
+        if (isRegionNode) {
+          label.alpha = 1
+        }
       }
 
       const gfx = graphicsPool.acquire()
       gfx.label = nodeId
       gfx.hitArea = new Circle(0, 0, r + 8)
       if (isRegionNode) {
-        // 大区节点：半透明填充 + 虚线边框
-        gfx.circle(0, 0, r).fill({ color: computedStyleMap["--secondary"], alpha: 0.06 })
+        // 大区节点：较高透明度填充（遮住内部连线）+ 虚线边框
+        gfx.circle(0, 0, r).fill({ color: computedStyleMap["--secondary"], alpha: 0.18 })
         drawDashedCircle(gfx, 0, 0, r, 6, 4, computedStyleMap["--secondary"], 0.5, 2)
       } else if (isAggNode) {
         // 聚合节点（可展开）：双圆环 + 浅色填充，专属标识
@@ -2405,10 +2408,14 @@ function main() {
             const countLabels = new Set(
               nodeRenderData.flatMap((n) => (n.countLabel ? [n.countLabel] : [])),
             )
+            const regionLabels = new Set(
+              nodeRenderData.filter((n) => n.simulationData.isRegion).map((n) => n.label),
+            )
 
             for (const label of labelsContainer.children) {
               if (badgeTexts.has(label)) continue
               if (countLabels.has(label)) continue
+              if (regionLabels.has(label)) continue
               if (!activeNodeLabels.has(label)) label.alpha = scaleOpacity
             }
             for (const label of edgeLabelsContainer.children) {
@@ -2450,8 +2457,8 @@ function main() {
         const posY = y + height / 2
         n.gfx.position.set(posX, posY)
         if (n.label) {
-          if (n.isAggregation) {
-            // 聚合节点标签显示在节点上方（加大偏移避免与双环重叠）
+          if (n.isAggregation || n.simulationData.isRegion) {
+            // 聚合节点 / 大区节点标签显示在节点上方
             const r = nodeRadius(n.simulationData)
             n.label.position.set(posX, posY - r - 16)
           } else {
@@ -2495,9 +2502,17 @@ function main() {
         const isAgg = l.isAggregation
         const lineW = isAgg ? 0.6 : 1
 
-        // 聚合节点（无论展开/收起）连线从圆圈边缘发出，避免连线穿入节点内部
-        let lineX1 = x1, lineY1 = y1
-        if (isAgg && ld.source.aggExpandedRadius) {
+        // 聚合节点 / 大区节点：连线从圆圈边缘发出/结束，避免穿入节点内部
+        let lineX1 = x1, lineY1 = y1, lineX2 = x2, lineY2 = y2
+
+        // source 端裁剪
+        if (ld.source.isRegion && ld.source.aggCollapsedRadius) {
+          const dx = x2 - x1
+          const dy = y2 - y1
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+          lineX1 = x1 + (dx / dist) * ld.source.aggCollapsedRadius
+          lineY1 = y1 + (dy / dist) * ld.source.aggCollapsedRadius
+        } else if (isAgg && ld.source.aggExpandedRadius) {
           const dx = x2 - x1
           const dy = y2 - y1
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
@@ -2511,20 +2526,29 @@ function main() {
           lineY1 = y1 + (dy / dist) * ld.source.aggCollapsedRadius
         }
 
+        // target 端裁剪（大区节点）
+        if (ld.target.isRegion && ld.target.aggCollapsedRadius) {
+          const dx = x1 - x2
+          const dy = y1 - y2
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+          lineX2 = x2 + (dx / dist) * ld.target.aggCollapsedRadius
+          lineY2 = y2 + (dy / dist) * ld.target.aggCollapsedRadius
+        }
+
         if (showArrows) {
-          const targetR = nodeRadius(ld.target)
-          const dx = x2 - x1
-          const dy = y2 - y1
+          const targetR = ld.target.isRegion ? 0 : nodeRadius(ld.target)
+          const dx = lineX2 - lineX1
+          const dy = lineY2 - lineY1
           const len = Math.sqrt(dx * dx + dy * dy)
           const arrowSize = isAgg ? 4 : 5
           if (len > targetR + arrowSize) {
             const ratio = (len - targetR) / len
-            const arrowX = x1 + dx * ratio
-            const arrowY = y1 + dy * ratio
+            const arrowX = lineX1 + dx * ratio
+            const arrowY = lineY1 + dy * ratio
             if (isAgg) {
               drawDashedLine(l.gfx, lineX1, lineY1, arrowX, arrowY)
             } else {
-              l.gfx.moveTo(x1, y1).lineTo(arrowX, arrowY)
+              l.gfx.moveTo(lineX1, lineY1).lineTo(arrowX, arrowY)
             }
             l.gfx.stroke({ alpha: l.alpha, width: lineW, color: l.color })
             const angle = Math.atan2(dy, dx)
@@ -2541,23 +2565,23 @@ function main() {
             l.gfx.fill({ color: l.color })
           } else {
             if (isAgg) {
-              drawDashedLine(l.gfx, lineX1, lineY1, x2, y2)
+              drawDashedLine(l.gfx, lineX1, lineY1, lineX2, lineY2)
             } else {
-              l.gfx.moveTo(x1, y1).lineTo(x2, y2)
+              l.gfx.moveTo(lineX1, lineY1).lineTo(lineX2, lineY2)
             }
             l.gfx.stroke({ alpha: l.alpha, width: lineW, color: l.color })
           }
         } else {
           if (isAgg) {
-            drawDashedLine(l.gfx, lineX1, lineY1, x2, y2)
+            drawDashedLine(l.gfx, lineX1, lineY1, lineX2, lineY2)
           } else {
-            l.gfx.moveTo(x1, y1).lineTo(x2, y2)
+            l.gfx.moveTo(lineX1, lineY1).lineTo(lineX2, lineY2)
           }
           l.gfx.stroke({ alpha: l.alpha, width: lineW, color: l.color })
         }
 
         if (l.label) {
-          l.label.position.set((lineX1 + x2) / 2, (lineY1 + y2) / 2)
+          l.label.position.set((lineX1 + lineX2) / 2, (lineY1 + lineY2) / 2)
         }
       }
 
