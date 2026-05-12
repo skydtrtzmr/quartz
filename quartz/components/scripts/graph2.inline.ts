@@ -1950,8 +1950,30 @@ function main() {
             }
           }
         } else {
-          // 最后一级：直接展开原始叶子
+          // 最后一级：直接展开原始叶子，并添加相关连线
           edgeNodesToAdd = rawChildren.filter((n) => !graphData.nodes.some((gn) => gn.id === n.id))
+
+          // 添加聚合节点到叶子的连线
+          const parentNodeRef = graphData.nodes.find((n) => n.id === nodeId)
+          const coreId = aggToCoreMap.get(nodeId)
+          if (parentNodeRef) {
+            for (const child of edgeNodesToAdd) {
+              edgeLinksToAdd.push({ source: parentNodeRef, target: child })
+            }
+          }
+
+          // 添加叶子之间原有的连线，但过滤掉与所属核心节点的连线
+          const childLinks = aggNodeToChildLinks.get(nodeId) ?? []
+          const visibleOrAddingIds = new Set([
+            ...graphData.nodes.map((n) => n.id),
+            ...edgeNodesToAdd.map((n) => n.id),
+          ])
+          for (const l of childLinks) {
+            if (coreId && (l.source.id === coreId || l.target.id === coreId)) continue
+            if (visibleOrAddingIds.has(l.source.id) && visibleOrAddingIds.has(l.target.id)) {
+              edgeLinksToAdd.push(l)
+            }
+          }
         }
       } else {
         edgeNodesToAdd = nodeToEdgeNodes.get(nodeId) ?? []
@@ -1962,60 +1984,12 @@ function main() {
 
       const parentNode = graphData.nodes.find((n) => n.id === nodeId)
 
-      // 判断是否为直接包含叶子的聚合节点（最后一级，或展开后无子聚合节点）
-      const aggInfo = isAggNode ? aggNodeInfoMap.get(nodeId) : undefined
-      const hasSubAggNodes = edgeNodesToAdd.some((n) => n.isAggregation)
-      const isLeafAggNode = isAggNode && (!aggInfo || aggInfo.remainingRules.length === 0 || !hasSubAggNodes)
-
-      if (isLeafAggNode && parentNode?.x !== undefined && parentNode?.y !== undefined) {
-        // 叶子聚合节点展开：创建放大背景圆圈，子节点沿内部均匀分布
-        const childCount = edgeNodesToAdd.length
-        // 计算子节点所需空间：考虑子节点自身半径 + 间距
-        let requiredR = 0
-        for (const child of edgeNodesToAdd) {
-          const childR = child.aggCollapsedRadius ?? nodeRadius(child)
-          requiredR = Math.max(requiredR, (childR + 10) / 0.82)
-        }
-        const baseR = Math.sqrt(childCount) * 14.14
-        const expandedR = Math.min(200, Math.max(35, Math.max(baseR, requiredR)))
-        parentNode.aggExpandedRadius = expandedR
-
-        const rd = nodeRenderData.find((r) => r.simulationData.id === nodeId)
-        if (rd) {
-          const bg = new Graphics({ interactive: false, eventMode: "none" })
-          bg.circle(0, 0, expandedR).fill({ color: computedStyleMap["--secondary"], alpha: 0.08 })
-          bg.circle(0, 0, expandedR).stroke({ width: 1.5, color: computedStyleMap["--secondary"], alpha: 0.4 })
-          bg.position.set(parentNode.x + width / 2, parentNode.y + height / 2)
-          linkContainer.addChildAt(bg, 0)
-          rd.aggBg = bg
-          rd.aggExpandedRadius = expandedR
-
-          rd.gfx.clear()
-          rd.gfx.hitArea = new Circle(0, 0, expandedR + 8)
-        }
-
-        const goldenAngle = Math.PI * (3 - Math.sqrt(5))
-        for (let i = 0; i < edgeNodesToAdd.length; i++) {
-          const edgeNode = edgeNodesToAdd[i]
-          if (graphData.nodes.some((n) => n.id === edgeNode.id)) continue
-          const childR = edgeNode.aggCollapsedRadius ?? nodeRadius(edgeNode)
-          const boundR = expandedR * 0.85 - childR
-          const r = Math.max(0, boundR * Math.sqrt((i + 0.5) / childCount))
-          const theta = goldenAngle * i
-          const offsetX = Math.cos(theta) * r
-          const offsetY = Math.sin(theta) * r
-          edgeNode.x = parentNode.x + offsetX
-          edgeNode.y = parentNode.y + offsetY
-          edgeNode.aggTargetOffset = { x: offsetX, y: offsetY }
-        }
-      } else {
-        // 多级聚合父节点 / 普通核心节点展开：子节点随机分布在周围
+      // 子节点随机分布在父节点周围（适用于聚合节点和核心节点）
+      if (parentNode?.x !== undefined && parentNode?.y !== undefined) {
         for (const edgeNode of edgeNodesToAdd) {
           if (graphData.nodes.some((n) => n.id === edgeNode.id)) continue
-          if (parentNode?.x !== undefined && parentNode?.y !== undefined) {
-            edgeNode.x = parentNode.x + (Math.random() - 0.5) * 80
-            edgeNode.y = parentNode.y + (Math.random() - 0.5) * 80
-          }
+          edgeNode.x = parentNode.x + (Math.random() - 0.5) * 80
+          edgeNode.y = parentNode.y + (Math.random() - 0.5) * 80
         }
       }
 
@@ -2072,8 +2046,7 @@ function main() {
 
       simulation.nodes(graphData.nodes)
       simulation.force("link", forceLink(graphData.links).distance(linkDistance))
-      // 叶子聚合节点展开时用较高 alpha 让布局快速收敛到正确位置
-      simulation.alpha(isLeafAggNode ? 0.3 : 0.2).restart()
+      simulation.alpha(0.3).restart()
     }
 
     function collapseNode(nodeId: SimpleSlug) {
