@@ -1,11 +1,20 @@
 import { describe, it } from "node:test"
 import { strict as assert } from "node:assert"
-import { createHash } from "crypto"
 import type { ContentDetails } from "./contentIndex"
+
+// 纯 JS djb2 哈希（与 graph2.inline.ts / graphLocal.tsx 保持一致）
+function djb2Hash(message: string): string {
+  let hash = 5381
+  for (let i = 0; i < message.length; i++) {
+    hash = ((hash << 5) + hash) + message.charCodeAt(i)
+    hash = hash & 0xffffffff
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0")
+}
 
 // Test getLocalGraphPath function logic
 function getLocalGraphPath(slug: string): string {
-  const hash = createHash("sha256").update(slug).digest("hex").slice(0, 4)
+  const hash = djb2Hash(slug).slice(0, 4)
   const dir1 = hash.slice(0, 2)
   const dir2 = hash.slice(2, 4)
   return `${dir1}/${dir2}/${slug}`
@@ -27,13 +36,13 @@ function getLocalGraphPathAlphabet(slug: string): string {
 }
 
 describe("GraphLocal Path Generation", () => {
-  describe("SHA-256 Strategy (default)", () => {
+  describe("djb2 Strategy (default)", () => {
     it("should generate consistent hash paths for slugs", () => {
       const path1 = getLocalGraphPath("api-test-page")
       const path2 = getLocalGraphPath("api-test-page")
       
       assert.equal(path1, path2)
-      // SHA-256 produces hex output
+      // djb2 produces hex output
       assert.match(path1, /^[a-f0-9]{2}\/[a-f0-9]{2}\/api-test-page$/)
     })
 
@@ -57,7 +66,7 @@ describe("GraphLocal Path Generation", () => {
 
     it("should handle slugs with path separators (nested directories)", () => {
       const path = getLocalGraphPath("folder/page-name")
-      // MD5 is computed on full slug "folder/page-name"
+      // djb2 is computed on full slug "folder/page-name"
       // But path includes the / which creates subdirectories
       assert.match(path, /^[a-f0-9]{2}\/[a-f0-9]{2}\/folder\/page-name$/)
       // Verify consistency
@@ -187,8 +196,8 @@ describe("Path Consistency (Emitter vs Reader)", () => {
       // Emitter side
       const emitterPath = getLocalGraphPath(slug)
       
-      // Reader side (same algorithm - SHA-256)
-      const hash = createHash("sha256").update(slug).digest("hex").slice(0, 4)
+      // Reader side (same algorithm - djb2)
+      const hash = djb2Hash(slug).slice(0, 4)
       const dir1 = hash.slice(0, 2)
       const dir2 = hash.slice(2, 4)
       const readerPath = `${dir1}/${dir2}/${slug}`
