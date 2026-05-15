@@ -92,16 +92,9 @@ function djb2Hash(message: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0")
 }
 
-// 保留 sha256 作为安全上下文下的备选（当前未使用）
-async function sha256(message: string): Promise<string> {
-  if (typeof crypto !== "undefined" && crypto.subtle) {
-    const msgBuffer = new TextEncoder().encode(message)
-    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
-  }
-  // 降级：使用 djb2 哈希（HTTP 非安全上下文）
-  return djb2Hash(message).repeat(8).slice(0, 64)
+// 统一使用 djb2Hash 计算路径，与构建端 graphLocal.tsx 保持一致
+function getLocalGraphHash(message: string): string {
+  return djb2Hash(message).slice(0, 4)
 }
 
 async function fetchCachedLocalGraph(fullSlug: string, basePath: string): Promise<any | null> {
@@ -116,7 +109,7 @@ async function fetchCachedLocalGraph(fullSlug: string, basePath: string): Promis
   // 创建新的 fetch Promise 并缓存
   // 注意：async IIFE 被调用时函数体立即执行，fetch 请求从这里开始
   const fetchPromise = (async () => {
-    const hash = await sha256(fullSlug)
+    const hash = getLocalGraphHash(fullSlug)
     const dir1 = hash.slice(0, 2)
     const dir2 = hash.slice(2, 4)
     const localGraphPath = basePath
