@@ -97,6 +97,54 @@ function getLocalGraphHash(message: string): string {
   return djb2Hash(message).slice(0, 4)
 }
 
+// ===== 全局图谱预计算 JSON 加载 =====
+// 构建时已计算好的全局图谱首屏数据 + 展开所需映射，运行时直接加载即可跳过全部计算
+interface GlobalGraphPrecomputed {
+  version: number
+  generatedAt: number
+  config: {
+    aggregation?: AggregationRule[]
+    regionRules?: AggregationRule[]
+    coreNodeFilter?: any
+    coreNodeLimit?: number
+    startCollapsed?: boolean
+    filterOrphans?: boolean
+    filterNonCoreNodes?: boolean
+    showTags?: boolean
+    removeTags?: string[]
+  }
+  nodeDetails: Record<string, { id: string; text: string; tags: string[]; frontmatter?: Record<string, unknown> }>
+  firstScreen: { nodes: string[]; links: Array<{ source: string; target: string; sourceField?: string }> }
+  adjacency: {
+    nodeToEdgeNodeIds: Record<string, string[]>
+    nodeToEdgeLinkIndices: Record<string, number[]>
+  }
+  aggNodes: Record<string, { coreId: string; childNodeIds: string[]; childLinkIndices: number[]; remainingRules: AggregationRule[]; currentField: string }>
+  aggToCore: Record<string, string>
+  regionNodes: Record<string, { childCoreIds: string[]; remainingRules: AggregationRule[]; currentField: string }>
+  coreToRegion: Record<string, string>
+  allChildLinks: Array<{ source: string; target: string; sourceField?: string }>
+  coreNodeIds: string[]
+  edgeNodeIds: string[]
+  nodeLinkCounts: Record<string, number>
+}
+
+async function fetchGlobalGraphPrecomputed(basePath: string): Promise<GlobalGraphPrecomputed | null> {
+  const indexPath = basePath
+    ? `/${basePath}/graph/global/graphGlobal.json`
+    : `/graph/global/graphGlobal.json`
+  try {
+    const resp = await fetch(indexPath)
+    if (!resp.ok) return null
+    const json = await resp.json()
+    console.log(`[Graph] ✅ graphGlobal.json loaded: ${json.firstScreen?.nodes?.length ?? 0} first-screen nodes`)
+    return json as GlobalGraphPrecomputed
+  } catch (e) {
+    console.log("[Graph] ❌ graphGlobal.json not found, falling back to runtime computation")
+    return null
+  }
+}
+
 async function fetchCachedLocalGraph(fullSlug: string, basePath: string): Promise<any | null> {
   const cacheKey = `${basePath}:${fullSlug}`
 
@@ -363,30 +411,220 @@ function main() {
     }
 
     // 如果预计算不可用或不需要，使用 fetchData + BFS/全局
+    let globalPrecomputed: GlobalGraphPrecomputed | null = null
     if (!localGraphData) {
       if (!checkGeneration(generation)) return () => {}
-      console.log("[DEBUG] 开始等待 fetchData")
-      data = new Map(
-        Object.entries<ContentDetails>(await fetchData).map(([k, v]) => [
-          simplifySlug(k as FullSlug),
-          v,
-        ]),
-      )
-      console.log("[DEBUG] fetchData 完成，数据条目数:", data.size)
+
+      // [GRAPH3] 全局图谱优先加载预计算的 graphGlobal.json
+      if (depth < 0) {
+        console.log("[GRAPH3] 全局图谱模式，尝试加载 graphGlobal.json...")
+        globalPrecomputed = await fetchGlobalGraphPrecomputed(basePath)
+      }
+
+      if (globalPrecomputed) {
+        // ===== 预计算路径：从 graphGlobal.json 构建所有运行时数据结构 =====
+        console.log("[GRAPH3] ✅ 使用预计算数据，跳过全部运行时计算")
+        data = new Map() // 空 Map，预计算分支会填充 contentData
+      } else {
+        // 回退：加载完整 contentIndex
+        console.log("[DEBUG] 开始等待 fetchData")
+        data = new Map(
+          Object.entries<ContentDetails>(await fetchData).map(([k, v]) => [
+            simplifySlug(k as FullSlug),
+            v,
+          ]),
+        )
+        console.log("[DEBUG] fetchData 完成，数据条目数:", data.size)
+      }
       if (!checkGeneration(generation)) return () => {}
     } else {
-      // 预计算成功时，从 localGraphData.nodes 构建 graphData
-      // 这样后续代码可以直接使用 graphData 而无需修改
+      // 局部预计算成功时，从 localGraphData.nodes 构建 graphData
       console.log("[Graph] ===== BUILDING graphData FROM PRECOMPUTED =====")
       data = new Map(Object.entries(localGraphData.nodes) as [SimpleSlug, ContentDetails][])
     }
 
     // 确保 data 已定义（TypeScript 智能推断）
     const contentData = data!
+    const isGlobalGraph = depth < 0
 
-    if (!checkGeneration(generation)) return () => {}
+    // ===== 前向声明：预计算路径和计算路径都会设置的变量 =====
+    // 这些变量在展开/收起函数中被引用，必须提升到两个路径的公共作用域
+    let allNodes: NodeData[] = []
+    let nodeLinkCount = new Map<string, number>()
+    let nodeToEdgeNodes: Map<SimpleSlug, NodeData[]> = new Map()
+    let nodeToEdgeLinks: Map<SimpleSlug, LinkData[]> = new Map()
+    let aggNodeToChildNodes: Map<SimpleSlug, NodeData[]> = new Map()
+    let aggNodeToChildLinks: Map<SimpleSlug, LinkData[]> = new Map()
+    let aggToCoreMap: Map<SimpleSlug, SimpleSlug> = new Map()
+    let regionNodeInfoMap: Map<SimpleSlug, any> = new Map()
+    let coreToRegionMap: Map<SimpleSlug, SimpleSlug> = new Map()
+    let graphData: { nodes: NodeData[]; links: LinkData[] }
+    let allLinks: LinkData[] = []
 
-    // ===== 动态虚拟节点计算 =====
+    // 聚合节点信息类型（expandNode 使用）
+    interface AggregationNodeInfo {
+      node: NodeData
+      coreId: SimpleSlug
+      childNodes: NodeData[]
+      childLinks: LinkData[]
+      remainingRules: AggregationRule[]
+      currentField: string
+    }
+    let aggNodeInfoMap: Map<SimpleSlug, AggregationNodeInfo> = new Map()
+
+    // [GRAPH3] 预计算路径 vs 运行时计算路径
+    if (globalPrecomputed) {
+      console.log("[GRAPH3] ===== 使用预计算数据构建图谱 =====")
+      const t0 = performance.now()
+
+      // 从 nodeDetails 构建 contentData（供 expandNode 的 frontmatter 分组使用）
+      const pc = globalPrecomputed
+      for (const [id, detail] of Object.entries(pc.nodeDetails)) {
+        contentData.set(id as SimpleSlug, {
+          slug: id as any,
+          filePath: "" as any,
+          title: detail.text,
+          links: [],
+          tags: detail.tags,
+          content: "",
+          frontmatter: detail.frontmatter as any,
+        })
+      }
+
+      // 构建 allNodes（所有非孤立节点）
+      allNodes = Object.values(pc.nodeDetails).map((d) => ({
+        id: d.id as SimpleSlug,
+        text: d.text,
+        tags: d.tags,
+        isCore: (pc.coreNodeIds as string[]).includes(d.id),
+      }))
+      // 标记聚合/大区节点，并补充预计算路径缺失的运行时属性
+      for (const id of Object.keys(pc.aggNodes)) {
+        const n = allNodes.find((x) => x.id === id)
+        if (n) {
+          n.isCore = false; (n as any).isAggregation = true
+          const info = pc.aggNodes[id]
+          n.aggChildCount = info.childNodeIds.length
+          n.aggCollapsedRadius = Math.min(30, Math.max(16, 2 + Math.sqrt(info.childNodeIds.length)))
+        }
+      }
+      for (const id of Object.keys(pc.regionNodes)) {
+        const n = allNodes.find((x) => x.id === id)
+        if (n) {
+          n.isCore = true; (n as any).isRegion = true
+          const info = pc.regionNodes[id]
+          n.edgeNodeCount = info.childCoreIds.length
+          n.aggCollapsedRadius = Math.min(40, Math.max(25, 5 + Math.sqrt(info.childCoreIds.length) * 3))
+        }
+      }
+
+      // nodeLinkCount
+      nodeLinkCount = new Map(Object.entries(pc.nodeLinkCounts))
+      // 为所有核心节点设置 edgeNodeCount（与运行时路径一致）
+      for (const n of allNodes) {
+        if (n.isCore && n.edgeNodeCount === undefined) {
+          n.edgeNodeCount = nodeLinkCount.get(n.id) ?? 0
+        }
+        if (n.isExpanded === undefined) n.isExpanded = false
+      }
+
+      // 邻接映射（nodeToEdgeNodes / nodeToEdgeLinks）
+      // 需要将 nodeId 转为 NodeData 引用
+      const allNodeMap = new Map(allNodes.map((n) => [n.id, n]))
+      for (const [coreId, edgeIds] of Object.entries(pc.adjacency.nodeToEdgeNodeIds)) {
+        const coreNode = allNodeMap.get(coreId as SimpleSlug)
+        if (!coreNode) continue
+        const edgeNodes: NodeData[] = []
+        const edgeLinks: LinkData[] = []
+        const linkIndices = pc.adjacency.nodeToEdgeLinkIndices[coreId] ?? []
+        for (let i = 0; i < edgeIds.length; i++) {
+          const edgeNode = allNodeMap.get(edgeIds[i] as SimpleSlug)
+          if (!edgeNode) continue
+          edgeNodes.push(edgeNode)
+          if (i < linkIndices.length && linkIndices[i] >= 0) {
+            const cl = pc.allChildLinks[linkIndices[i]]
+            if (cl) {
+              const sourceNode = cl.source === coreId ? coreNode : (allNodeMap.get(cl.source as SimpleSlug) || edgeNode)
+              const targetNode2 = cl.target === coreId ? coreNode : (allNodeMap.get(cl.target as SimpleSlug) || edgeNode)
+              if (sourceNode && targetNode2) {
+                edgeLinks.push({ source: sourceNode, target: targetNode2, sourceField: cl.sourceField })
+              }
+            }
+          } else {
+            // 聚合连接 (-1)：核心节点 → 聚合节点
+            edgeLinks.push({ source: edgeNode, target: coreNode })
+          }
+        }
+        nodeToEdgeNodes.set(coreId as SimpleSlug, edgeNodes)
+        nodeToEdgeLinks.set(coreId as SimpleSlug, edgeLinks)
+      }
+
+      // aggNodeInfoMap
+      const aggInfoMap = new Map<SimpleSlug, any>()
+      for (const [aggId, info] of Object.entries(pc.aggNodes)) {
+        const childNodeData = (info.childNodeIds as string[]).map((id) => allNodeMap.get(id as SimpleSlug)).filter(Boolean) as NodeData[]
+        const childLinkData: LinkData[] = []
+        for (const idx of info.childLinkIndices) {
+          const cl = pc.allChildLinks[idx]
+          if (cl) {
+            const sn = allNodeMap.get(cl.source as SimpleSlug) || childNodeData.find((n) => n.id === cl.source)
+            const tn = allNodeMap.get(cl.target as SimpleSlug) || childNodeData.find((n) => n.id === cl.target)
+            if (sn && tn) childLinkData.push({ source: sn, target: tn, sourceField: cl.sourceField })
+          }
+        }
+        const aggNode = allNodeMap.get(aggId as SimpleSlug)
+        aggInfoMap.set(aggId as SimpleSlug, {
+          node: aggNode,
+          coreId: info.coreId,
+          childNodes: childNodeData,
+          childLinks: childLinkData,
+          remainingRules: info.remainingRules,
+          currentField: info.currentField,
+        })
+        aggNodeToChildNodes.set(aggId as SimpleSlug, childNodeData)
+        aggNodeToChildLinks.set(aggId as SimpleSlug, childLinkData)
+        aggToCoreMap.set(aggId as SimpleSlug, info.coreId as SimpleSlug)
+      }
+      // regionNodeInfoMap
+      for (const [regionId, info] of Object.entries(pc.regionNodes)) {
+        const childCores = (info.childCoreIds as string[]).map((id) => allNodeMap.get(id as SimpleSlug)).filter(Boolean) as NodeData[]
+        const regionNode = allNodeMap.get(regionId as SimpleSlug)
+        if (regionNode) {
+          regionNodeInfoMap.set(regionId as SimpleSlug, {
+            node: regionNode,
+            childCores,
+            remainingRules: info.remainingRules,
+            currentField: info.currentField,
+          })
+        }
+        for (const cid of info.childCoreIds) {
+          coreToRegionMap.set(cid as SimpleSlug, regionId as SimpleSlug)
+        }
+      }
+
+      // 构建首屏 graphData
+      const firstScreenNodes = pc.firstScreen.nodes.map((id) => allNodeMap.get(id as SimpleSlug)).filter(Boolean) as NodeData[]
+      const firstScreenLinks: LinkData[] = pc.firstScreen.links.map((l) => {
+        const sn = allNodeMap.get(l.source as SimpleSlug)
+        const tn = allNodeMap.get(l.target as SimpleSlug)
+        if (!sn || !tn) return null
+        return { source: sn, target: tn, sourceField: l.sourceField }
+      }).filter(Boolean) as LinkData[]
+
+      graphData = { nodes: firstScreenNodes, links: firstScreenLinks }
+
+      // allLinks：预计算路径下用全部子链接（用于展开后的连通性判断）
+      allLinks = pc.allChildLinks
+        .map((l) => {
+          const sn = allNodeMap.get(l.source as SimpleSlug)
+          const tn = allNodeMap.get(l.target as SimpleSlug)
+          if (!sn || !tn) return null
+          return { source: sn, target: tn, sourceField: l.sourceField }
+        })
+        .filter(Boolean) as LinkData[]
+
+      console.log(`[GRAPH3] 预计算数据构建完成: ${(performance.now() - t0).toFixed(1)}ms, ${firstScreenNodes.length} nodes, ${firstScreenLinks.length} links`)
+    } else {
     const virtualNodes = new Set<SimpleSlug>()
     const allExistingSlugs = new Set(contentData.keys())
     const allTagSlugs = new Set<SimpleSlug>()
@@ -430,7 +668,6 @@ function main() {
       return undefined
     }
 
-    const isGlobalGraph = depth < 0
     if (isGlobalGraph) {
       const source = rawCoreNodeLimit !== undefined ? "配置值" : "默认值"
       console.log(`[Graph] 全局图谱 coreNodeLimit: ${coreNodeLimit} (${source})`)
@@ -558,9 +795,8 @@ function main() {
     }
 
     // ===== 节点和链接构建 =====
-    const tweens = new Map<string, TweenNode>()
 
-    const allNodes: NodeData[] = [...neighbourhood].map((url) => ({
+    allNodes = [...neighbourhood].map((url) => ({
       id: url,
       text: url.startsWith("tags/") ? "#" + url.substring(5) : (contentData.get(url)?.title ?? url),
       tags: contentData.get(url)?.tags ?? [],
@@ -569,7 +805,7 @@ function main() {
 
     // 链接去重
     const linkKeySet = new Set<string>()
-    const allLinks = links
+    allLinks = links
       .filter((l) => neighbourhood.has(l.source) && neighbourhood.has(l.target))
       .filter((l) => {
         const key = `${l.source}->${l.target}`
@@ -584,7 +820,7 @@ function main() {
       }))
 
     // 连接数统计
-    const nodeLinkCount = new Map<string, number>()
+    nodeLinkCount = new Map<string, number>()
     for (const l of allLinks) {
       nodeLinkCount.set(l.source.id, (nodeLinkCount.get(l.source.id) ?? 0) + 1)
       nodeLinkCount.set(l.target.id, (nodeLinkCount.get(l.target.id) ?? 0) + 1)
@@ -649,8 +885,8 @@ function main() {
     const edgeNodeIds = new Set(edgeNodes.map((n) => n.id))
 
     // 构建核心节点 → 边缘节点的映射（用于全局图谱展开/收起）
-    const nodeToEdgeNodes = new Map<SimpleSlug, NodeData[]>()
-    const nodeToEdgeLinks = new Map<SimpleSlug, LinkData[]>()
+    nodeToEdgeNodes = new Map<SimpleSlug, NodeData[]>()
+    nodeToEdgeLinks = new Map<SimpleSlug, LinkData[]>()
     for (const l of nonOrphanLinks) {
       const srcIsEdge = edgeNodeIds.has(l.source.id)
       const tgtIsEdge = edgeNodeIds.has(l.target.id)
@@ -691,19 +927,12 @@ function main() {
     // ===== 边缘节点聚合 =====
     // 根据 aggregation 规则列表配置，将边缘节点按规则顺序分组为聚合节点
     // 聚合节点作为核心节点的新"边缘邻居"替代散点边缘节点
-    interface AggregationNodeInfo {
-      node: NodeData
-      coreId: SimpleSlug
-      childNodes: NodeData[]
-      childLinks: LinkData[]
-      remainingRules: AggregationRule[]
-      currentField: string
-    }
-    const aggNodeInfoMap = new Map<SimpleSlug, AggregationNodeInfo>()
-    const aggNodeToChildNodes = new Map<SimpleSlug, NodeData[]>()
-    const aggNodeToChildLinks = new Map<SimpleSlug, LinkData[]>()
+    // AggregationNodeInfo 接口已提升到公共作用域
+    aggNodeInfoMap = new Map<SimpleSlug, AggregationNodeInfo>()
+    aggNodeToChildNodes = new Map<SimpleSlug, NodeData[]>()
+    aggNodeToChildLinks = new Map<SimpleSlug, LinkData[]>()
     // 聚合节点 ID → 所属核心节点 ID
-    const aggToCoreMap = new Map<SimpleSlug, SimpleSlug>()
+    aggToCoreMap = new Map<SimpleSlug, SimpleSlug>()
 
     const rules = aggregation ?? []
 
@@ -900,8 +1129,8 @@ function main() {
     }
 
     // ===== 大区节点生成（全局图谱 + 配置了 regionRules）=====
-    const regionNodeInfoMap = new Map<SimpleSlug, { node: NodeData; childCores: NodeData[]; remainingRules: AggregationRule[]; currentField: string }>()
-    const coreToRegionMap = new Map<SimpleSlug, SimpleSlug>()
+    regionNodeInfoMap = new Map<SimpleSlug, { node: NodeData; childCores: NodeData[]; remainingRules: AggregationRule[]; currentField: string }>()
+    coreToRegionMap = new Map<SimpleSlug, SimpleSlug>()
 
     if (isGlobalGraph && regionRules && regionRules.length > 0) {
       const coreNodes = nonOrphanNodes.filter((n) => n.isCore && !n.isAggregation && !n.isRegion)
@@ -980,74 +1209,10 @@ function main() {
       console.log(`[Graph] 大区聚合完成：${regionNodeInfoMap.size} 个大区，${coreToRegionMap.size} 个核心节点`)
     }
 
-    // 追踪展开的聚合节点与其子节点的映射，用于碰撞检测时跳过父子碰撞
-    const expandedAggChildren = new Map<SimpleSlug, Set<SimpleSlug>>()
-
-    function nodeRadius(d: NodeData) {
-      if (d.aggExpandedRadius) return d.aggExpandedRadius
-      if (d.aggCollapsedRadius) return d.aggCollapsedRadius
-      const linkCount = nodeLinkCount.get(d.id) ?? 0
-      // 标签节点：连接数通常很大，缩小整体半径
-      if (d.id.startsWith("tags/")) {
-        return 2 + Math.sqrt(linkCount) * 0.65
-      }
-      // 核心节点（连接数>1）最小半径更大，视觉上更突出
-      const baseRadius = d.isCore ? 8 : 2
-      return baseRadius + Math.sqrt(linkCount)
-    }
-
-    // 自定义碰撞力：展开的聚合节点与其子节点之间不进行碰撞检测
-    // 注意：D3 力应修改 vx/vy 而非直接修改 x/y，由 simulation 统一应用速度衰减
-    function createAggAwareCollide() {
-      let nodes: NodeData[] = []
-
-      function force(_alpha: number) {
-        // 拖拽中跳过碰撞计算，避免残差速度导致抖动
-        if (dragging) return
-        for (let k = 0; k < 3; k++) {
-          for (let i = 0; i < nodes.length; i++) {
-            const ni = nodes[i]
-            if (ni.x == null || ni.y == null) continue
-            const ri = nodeRadius(ni) + 8
-
-            for (let j = i + 1; j < nodes.length; j++) {
-              const nj = nodes[j]
-              if (nj.x == null || nj.y == null) continue
-
-              // 跳过展开的聚合节点与其子节点之间的碰撞
-              if (ni.aggExpandedRadius && expandedAggChildren.get(ni.id)?.has(nj.id)) continue
-              if (nj.aggExpandedRadius && expandedAggChildren.get(nj.id)?.has(ni.id)) continue
-
-              const rj = nodeRadius(nj) + 12
-              let dx = ni.x - nj.x
-              let dy = ni.y - nj.y
-              let dist = Math.sqrt(dx * dx + dy * dy) || 1
-              const minDist = ri + rj
-
-              if (dist < minDist) {
-                const push = (minDist - dist) / dist * 0.8
-                ni.vx = (ni.vx ?? 0) + dx * push
-                ni.vy = (ni.vy ?? 0) + dy * push
-                nj.vx = (nj.vx ?? 0) - dx * push
-                nj.vy = (nj.vy ?? 0) - dy * push
-              }
-            }
-          }
-        }
-      }
-
-      force.initialize = (n: NodeData[]) => {
-        nodes = n
-      }
-
-      return force
-    }
-
     // [CONFIG] 根据 filterOrphans / startCollapsed 决定初始渲染的节点集合
     const initialNodes = filterOrphans ? nonOrphanNodes : allNodes
     const initialLinks = filterOrphans ? nonOrphanLinks : allLinks
 
-    let graphData: { nodes: NodeData[]; links: LinkData[] }
     if (isGlobalGraph && startCollapsed) {
       if (regionRules && regionRules.length > 0) {
         // [REGION] 大区模式首屏：大区节点 + 跨区叶节点
@@ -1142,6 +1307,72 @@ function main() {
         }
       }
       graphData = { nodes: mergedNodes, links: mergedLinks }
+    }
+    } // end else (!globalPrecomputed)
+
+    const tweens = new Map<string, TweenNode>()
+
+    // 追踪展开的聚合节点与其子节点的映射，用于碰撞检测时跳过父子碰撞
+    const expandedAggChildren = new Map<SimpleSlug, Set<SimpleSlug>>()
+
+    function nodeRadius(d: NodeData) {
+      if (d.aggExpandedRadius) return d.aggExpandedRadius
+      if (d.aggCollapsedRadius) return d.aggCollapsedRadius
+      const linkCount = nodeLinkCount.get(d.id) ?? 0
+      // 标签节点：连接数通常很大，缩小整体半径
+      if (d.id.startsWith("tags/")) {
+        return 2 + Math.sqrt(linkCount) * 0.65
+      }
+      // 核心节点（连接数>1）最小半径更大，视觉上更突出
+      const baseRadius = d.isCore ? 8 : 2
+      return baseRadius + Math.sqrt(linkCount)
+    }
+
+    // 自定义碰撞力：展开的聚合节点与其子节点之间不进行碰撞检测
+    // 注意：D3 力应修改 vx/vy 而非直接修改 x/y，由 simulation 统一应用速度衰减
+    function createAggAwareCollide() {
+      let nodes: NodeData[] = []
+
+      function force(_alpha: number) {
+        // 拖拽中跳过碰撞计算，避免残差速度导致抖动
+        if (dragging) return
+        for (let k = 0; k < 3; k++) {
+          for (let i = 0; i < nodes.length; i++) {
+            const ni = nodes[i]
+            if (ni.x == null || ni.y == null) continue
+            const ri = nodeRadius(ni) + 8
+
+            for (let j = i + 1; j < nodes.length; j++) {
+              const nj = nodes[j]
+              if (nj.x == null || nj.y == null) continue
+
+              // 跳过展开的聚合节点与其子节点之间的碰撞
+              if (ni.aggExpandedRadius && expandedAggChildren.get(ni.id)?.has(nj.id)) continue
+              if (nj.aggExpandedRadius && expandedAggChildren.get(nj.id)?.has(ni.id)) continue
+
+              const rj = nodeRadius(nj) + 12
+              let dx = ni.x - nj.x
+              let dy = ni.y - nj.y
+              let dist = Math.sqrt(dx * dx + dy * dy) || 1
+              const minDist = ri + rj
+
+              if (dist < minDist) {
+                const push = (minDist - dist) / dist * 0.8
+                ni.vx = (ni.vx ?? 0) + dx * push
+                ni.vy = (ni.vy ?? 0) + dy * push
+                nj.vx = (nj.vx ?? 0) - dx * push
+                nj.vy = (nj.vy ?? 0) - dy * push
+              }
+            }
+          }
+        }
+      }
+
+      force.initialize = (n: NodeData[]) => {
+        nodes = n
+      }
+
+      return force
     }
 
     const width = graph.offsetWidth

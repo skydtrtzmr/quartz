@@ -1,6 +1,13 @@
 import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 import { oceanColors } from "./quartz/themes"
+import {
+  graphAggregation,
+  graphCoreNodeFilter,
+  graphCoreNodeLimit,
+  graphRegionRules,
+  graphFilterNonCoreNodes,
+} from "./quartz.layout"
 import fs from "fs"
 import path from "path"
 /**
@@ -95,6 +102,15 @@ const config: QuartzConfig = {
         enableSiteMap: true,
         enableRSS: true,
       }),
+      Plugin.GraphGlobal({
+        // 配置从 quartz.layout.json 自动加载，无需在此重复维护
+        coreNodeFilter: graphCoreNodeFilter,
+        coreNodeLimit: graphCoreNodeLimit,
+        regionRules: graphRegionRules,
+        aggregation: graphAggregation,
+        filterNonCoreNodes: graphFilterNonCoreNodes,
+      }),
+      // 必须在 ContentIndex 之后，生成精简版图谱所需数据。
       Plugin.GraphLocalEmitter({
         // depth 已移除，统一使用 quartz.config.ts 中的 graph.localDepth 配置
         showTags: true,

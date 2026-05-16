@@ -85,13 +85,13 @@ export const folderPageSort: SortConfig = layoutCfg.folderPage?.sort ?? defaultS
 // Explorer2 排序配置（供 Explorer2.tsx 使用）
 export const explorerSort: SortConfig = layoutCfg.explorer?.sort ?? defaultSortConfig
 
-// Graph 聚合配置（供 Graph.tsx 使用）
-const graphAggregation = layoutCfg.graph?.aggregation ?? undefined
-const graphCoreNodeFilter = layoutCfg.graph?.coreNodeFilter ?? undefined
-const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
-const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
-const graphExpandCoresOnRegionOpen = layoutCfg.graph?.expandCoresOnRegionOpen ?? false
-const graphFilterNonCoreNodes = layoutCfg.graph?.filterNonCoreNodes ?? true
+// Graph 聚合配置（供 Graph.tsx 使用，同时导出供 GraphGlobal 插件使用）
+export const graphAggregation = layoutCfg.graph?.aggregation ?? undefined
+export const graphCoreNodeFilter = layoutCfg.graph?.coreNodeFilter ?? undefined
+export const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
+export const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
+export const graphExpandCoresOnRegionOpen = layoutCfg.graph?.expandCoresOnRegionOpen ?? false
+export const graphFilterNonCoreNodes = layoutCfg.graph?.filterNonCoreNodes ?? true
 
 // ===== 组件布局 =====
 

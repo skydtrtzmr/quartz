@@ -1,8 +1,7 @@
 import { QuartzEmitterPlugin } from "../types"
-import { FullSlug, SimpleSlug, simplifySlug } from "../../util/path"
+import { FullSlug, SimpleSlug, simplifySlug, joinSegments } from "../../util/path"
 import { write } from "./helpers"
 import { ContentDetails } from "./contentIndex"
-// TODO 现在这个局部图谱预构建功能，还不支持增量生成。
 
 // LocalGraphEdge 与 graph.inline.ts 中的 SimpleLinkData 对应
 interface LocalGraphEdge {
@@ -76,32 +75,112 @@ function getFrontmatterFieldForLink(frontmatter: any, targetLink: string): strin
 
 export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
   opts = { ...defaultOptions, ...opts }
+
+  /**
+   * 为指定 slug 集合生成 local graph 并写入文件。
+   * linkIndex 必须包含全量数据。
+   */
+  async function* generateLocalGraphs(
+    ctx: any,
+    slugsToGenerate: Set<SimpleSlug>,
+    linkIndex: Map<SimpleSlug, ContentDetails>,
+    validLinks: Set<SimpleSlug>,
+    virtualNodes: Set<SimpleSlug>,
+    allTags: Set<SimpleSlug>,
+    depth: number,
+  ) {
+    const createVirtualContentDetails = (slug: SimpleSlug, isTag: boolean): ContentDetails => ({
+      slug: slug as unknown as FullSlug,
+      filePath: "" as any,
+      title: isTag ? "#" + slug.replace("tags/", "") : slug,
+      links: [],
+      tags: [],
+      content: "",
+      frontmatter: {},
+    })
+
+    for (const slug of slugsToGenerate) {
+      let centerData: ContentDetails
+      const isReal = linkIndex.has(slug)
+      const isTag = allTags.has(slug)
+
+      if (isReal) {
+        centerData = linkIndex.get(slug)!
+      } else {
+        centerData = createVirtualContentDetails(slug, isTag)
+      }
+
+      const localGraph = calculateLocalGraph(
+        slug,
+        centerData,
+        linkIndex,
+        validLinks,
+        virtualNodes,
+        depth,
+      )
+
+      const path = getLocalGraphPath(slug)
+      const fp = ("graph/local/" + path) as FullSlug
+
+      yield write({
+        ctx,
+        content: JSON.stringify(localGraph),
+        slug: fp,
+        ext: ".json",
+      })
+    }
+  }
+
+  /**
+   * 从 linkIndex 中收集所有 slug（real + tags + virtual），
+   * 为每个 slug 生成 local graph。
+   */
+  async function* generateAllLocalGraphs(
+    ctx: any,
+    linkIndex: Map<SimpleSlug, ContentDetails>,
+    depth: number,
+  ) {
+    const allExistingSlugs = new Set(linkIndex.keys())
+    const allTags = new Set<SimpleSlug>()
+    const virtualNodes = new Set<SimpleSlug>()
+
+    for (const [, details] of linkIndex.entries()) {
+      for (const tag of details.tags) {
+        allTags.add(simplifySlug(("tags/" + tag) as FullSlug))
+      }
+    }
+
+    for (const [, details] of linkIndex.entries()) {
+      for (const link of details.links ?? []) {
+        if (!allExistingSlugs.has(link) && !allTags.has(link) && !link.startsWith("tags/")) {
+          virtualNodes.add(link)
+        }
+      }
+    }
+
+    const validLinks = new Set([...allExistingSlugs, ...allTags, ...virtualNodes])
+    const allSlugs = new Set([...allExistingSlugs, ...allTags, ...virtualNodes])
+
+    yield* generateLocalGraphs(ctx, allSlugs, linkIndex, validLinks, virtualNodes, allTags, depth)
+
+    return { virtualNodes: virtualNodes.size, allTags: allTags.size, allSlugs: allSlugs.size }
+  }
+
   return {
     name: "GraphLocalEmitter",
+
+    // 全量构建
     async *emit(ctx, content) {
       const cfg = ctx.cfg.configuration
-      
-      // Check if precomputation is enabled
       if (!cfg.graph?.precomputeLocal) {
-        console.log("[GraphLocal] Precomputation disabled, skipping generation")
+        console.log("[GraphLocal] Precomputation disabled, skipping")
         return
       }
 
-      // Count input files
-      let contentCount = 0
-      for (const _ of content) {
-        contentCount++
-      }
-      
-      // Build content index (use SimpleSlug as key for consistency)
-      // Note: We store both the simplified slug (for neighbor lookup) and full slug (for hash/path generation)
       const linkIndex = new Map<SimpleSlug, ContentDetails>()
-      const fullSlugToSimpleSlug = new Map<FullSlug, SimpleSlug>()
-      
       for (const [, file] of content) {
         const fullSlug = file.data.slug!
         const simplifiedSlug = simplifySlug(fullSlug)
-        
         linkIndex.set(simplifiedSlug, {
           slug: fullSlug,
           filePath: file.data.relativePath!,
@@ -111,10 +190,43 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
           content: file.data.text ?? "",
           frontmatter: file.data.frontmatter ?? {},
         })
-        fullSlugToSimpleSlug.set(fullSlug, simplifiedSlug)
       }
 
-      // Collect all tags and virtual nodes
+      const depth = cfg.graph?.localDepth ?? 1
+      console.log(`[GraphLocal] Starting local graph generation (depth=${depth})...`)
+      console.log(`[GraphLocal] Input files: ${linkIndex.size}`)
+
+      const result = yield* generateAllLocalGraphs(ctx, linkIndex, depth)
+
+      console.log(`[GraphLocal] Virtual nodes: ${result.virtualNodes}, Tags: ${result.allTags}`)
+      console.log(`[GraphLocal] Generation complete: ${result.allSlugs} pages`)
+    },
+
+    // 增量构建：只重新生成受变更影响的页面
+    async *partialEmit(ctx, _content, _resources, changeEvents) {
+      const cfg = ctx.cfg.configuration
+      if (!cfg.graph?.precomputeLocal) {
+        console.log("[GraphLocal] Precomputation disabled, skipping")
+        return
+      }
+
+      const fs = await import("fs/promises")
+      const contentIndexPath = joinSegments(ctx.argv.output, "static", "contentIndex.json")
+      let fullIndex: Record<string, ContentDetails> = {}
+      try {
+        const raw = await fs.readFile(contentIndexPath, "utf-8")
+        fullIndex = JSON.parse(raw)
+      } catch {
+        console.log("[GraphLocal] contentIndex.json not found, skipping")
+        return
+      }
+
+      // 构建全量 linkIndex
+      const linkIndex = new Map<SimpleSlug, ContentDetails>()
+      for (const [k, v] of Object.entries(fullIndex)) {
+        linkIndex.set(simplifySlug(k as FullSlug), v)
+      }
+
       const allExistingSlugs = new Set(linkIndex.keys())
       const allTags = new Set<SimpleSlug>()
       const virtualNodes = new Set<SimpleSlug>()
@@ -124,7 +236,6 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
           allTags.add(simplifySlug(("tags/" + tag) as FullSlug))
         }
       }
-
       for (const [, details] of linkIndex.entries()) {
         for (const link of details.links ?? []) {
           if (!allExistingSlugs.has(link) && !allTags.has(link) && !link.startsWith("tags/")) {
@@ -132,21 +243,66 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
           }
         }
       }
-
       const validLinks = new Set([...allExistingSlugs, ...allTags, ...virtualNodes])
-      
-      // 统一使用 cfg.graph.localDepth（与 graph2.inline.ts 中的 precomputeDepth 一致）
-      const depth = cfg.graph?.localDepth ?? 1
-      if (!cfg.graph?.localDepth) {
-        console.warn("[GraphLocal] cfg.graph.localDepth not set, using default depth=1")
+
+      // 确定受影响的 slug：变更文件 + 入链/出链邻居
+      const affectedSlugs = new Set<SimpleSlug>()
+      const deletedSlugs = new Set<SimpleSlug>()
+
+      for (const evt of changeEvents) {
+        const slug = simplifySlug(evt.file?.data.slug ?? (evt.path.replace(/\.md$/, "") as SimpleSlug))
+        affectedSlugs.add(slug)
+
+        if (evt.type === "delete") {
+          deletedSlugs.add(slug)
+        }
+
+        // 添加出链目标（邻居的 local graph 需要更新）
+        const data = linkIndex.get(slug)
+        if (data) {
+          for (const link of data.links ?? []) {
+            affectedSlugs.add(link)
+          }
+          for (const tag of data.tags) {
+            affectedSlugs.add(simplifySlug(("tags/" + tag) as FullSlug))
+          }
+        }
+
+        // 添加入链来源（所有链接到此 slug 的页面）
+        for (const [other, details] of linkIndex.entries()) {
+          if (details.links?.includes(slug)) {
+            affectedSlugs.add(other)
+          }
+        }
       }
-      console.log(`[GraphLocal] Starting local graph generation (depth=${depth})...`)
-      console.log(`[GraphLocal] Input files: ${contentCount}`)
-      console.log(`[GraphLocal] Virtual nodes: ${virtualNodes.size}, Tags: ${allTags.size}`)
 
-      let generatedCount = 0
+      // 删除已不存在的文件对应的 local graph
+      for (const slug of deletedSlugs) {
+        const path = getLocalGraphPath(slug)
+        const fp = joinSegments(ctx.argv.output, "graph", "local", path + ".json")
+        try {
+          await fs.unlink(fp)
+          console.log(`[GraphLocal] Deleted local graph: ${slug}`)
+        } catch {
+          // 文件可能不存在，忽略
+        }
+      }
 
-      // Helper to create a minimal ContentDetails for virtual nodes
+      // 只对关联的标签/虚拟节点生成，跳过实际存在的实体节点
+      const slugsToGenerate = new Set<SimpleSlug>()
+      for (const slug of affectedSlugs) {
+        if (allExistingSlugs.has(slug)) {
+          slugsToGenerate.add(slug)
+        } else if (allTags.has(slug) || virtualNodes.has(slug)) {
+          slugsToGenerate.add(slug)
+        }
+      }
+
+      const depth = cfg.graph?.localDepth ?? 1
+      console.log(`[GraphLocal] Incremental update (depth=${depth})...`)
+      console.log(`[GraphLocal] Changed files: ${changeEvents.length}, Affected pages: ${slugsToGenerate.size}`)
+
+      let count = 0
       const createVirtualContentDetails = (slug: SimpleSlug, isTag: boolean): ContentDetails => ({
         slug: slug as unknown as FullSlug,
         filePath: "" as any,
@@ -157,87 +313,23 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
         frontmatter: {},
       })
 
-      // Generate local graph for each REAL page
-      // Use SimpleSlug (linkIndex key) for center, FullSlug only for path hashing
-      for (const [simpleSlug, centerData] of linkIndex.entries()) {
-        const localGraph = calculateLocalGraph(
-          simpleSlug,
-          centerData,
-          linkIndex,
-          validLinks,
-          virtualNodes,
-          depth
-        )
+      for (const slug of slugsToGenerate) {
+        let centerData: ContentDetails
+        if (linkIndex.has(slug)) {
+          centerData = linkIndex.get(slug)!
+        } else {
+          centerData = createVirtualContentDetails(slug, allTags.has(slug))
+        }
 
-        // Use FullSlug for path generation to match runtime expectations
-        const fullSlug = centerData.slug as FullSlug
-        const path = getLocalGraphPath(fullSlug as unknown as SimpleSlug)
+        const localGraph = calculateLocalGraph(slug, centerData, linkIndex, validLinks, virtualNodes, depth)
+        const path = getLocalGraphPath(slug)
         const fp = ("graph/local/" + path) as FullSlug
 
-        yield write({
-          ctx,
-          content: JSON.stringify(localGraph),
-          slug: fp,
-          ext: ".json",
-        })
-        generatedCount++
+        yield write({ ctx, content: JSON.stringify(localGraph), slug: fp, ext: ".json" })
+        count++
       }
 
-      // Generate local graph for TAG pages
-      for (const tagSlug of allTags) {
-        // Skip if real file exists (shouldn't happen but be safe)
-        if (linkIndex.has(tagSlug)) continue
-
-        const virtualData = createVirtualContentDetails(tagSlug, true)
-        const localGraph = calculateLocalGraph(
-          tagSlug,
-          virtualData,
-          linkIndex,
-          validLinks,
-          virtualNodes,
-          depth
-        )
-
-        const path = getLocalGraphPath(tagSlug)
-        const fp = ("graph/local/" + path) as FullSlug
-
-        yield write({
-          ctx,
-          content: JSON.stringify(localGraph),
-          slug: fp,
-          ext: ".json",
-        })
-        generatedCount++
-      }
-
-      // Generate local graph for PURE VIRTUAL nodes (links that don't exist anywhere)
-      for (const vSlug of virtualNodes) {
-        // Skip if it's already covered by tag or real file
-        if (allTags.has(vSlug) || linkIndex.has(vSlug)) continue
-
-        const virtualData = createVirtualContentDetails(vSlug, false)
-        const localGraph = calculateLocalGraph(
-          vSlug,
-          virtualData,
-          linkIndex,
-          validLinks,
-          virtualNodes,
-          depth
-        )
-
-        const path = getLocalGraphPath(vSlug)
-        const fp = ("graph/local/" + path) as FullSlug
-
-        yield write({
-          ctx,
-          content: JSON.stringify(localGraph),
-          slug: fp,
-          ext: ".json",
-        })
-        generatedCount++
-      }
-
-      console.log(`[GraphLocal] Generation complete: ${generatedCount} pages`)
+      console.log(`[GraphLocal] Incremental generation complete: ${count} pages updated`)
     },
   }
 }
