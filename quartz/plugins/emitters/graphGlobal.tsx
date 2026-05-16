@@ -46,6 +46,7 @@ interface PreAggNodeInfo {
   childLinkIndices: number[]
   remainingRules: AggregationRule[]
   currentField: string
+  displayText: string
 }
 
 interface PreRegionNodeInfo {
@@ -356,9 +357,15 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
             if (rule.type === "folder" && groupMap.size <= 1) continue
             if (groupMap.size === 0) continue
 
-            const currentField = rule.type === "folder" ? "📁" : (rule.field ?? rule.type)
+              const currentField = rule.type === "folder" ? "📁" : (rule.field ?? rule.type)
             for (const [groupKey, childIds] of groupMap) {
               const aggId = `agg:${coreId}:${rule.type}:${rule.field ?? ""}:${groupKey}`
+
+              // 生成显示文本（与 graph3.inline.ts 运行时路径一致）
+              const displayPrefix = rule.type === "folder" ? "📁 " : ""
+              const displayText = rule.type === "folder" && groupKey === "/"
+                ? "📁 根目录"
+                : `${displayPrefix}${groupKey}`
 
               // 收集子节点间链接
               const childLinkIndices: number[] = []
@@ -380,6 +387,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
                 childLinkIndices,
                 remainingRules: rules.slice(ruleIdx + 1),
                 currentField,
+                displayText,
               }
               aggToCore[aggId] = coreId
               for (const cid of childIds) childToAgg.set(`${coreId}\t${cid}`, aggId)
@@ -479,7 +487,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
       for (const aggId of Object.keys(aggNodes)) {
         nodeDetails[aggId] = {
           id: aggId,
-          text: aggId.split(":").slice(3).join(":"),
+          text: aggNodes[aggId].displayText,
           tags: [],
         }
       }
