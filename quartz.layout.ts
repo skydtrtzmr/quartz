@@ -30,6 +30,7 @@ interface LayoutConfig {
     regionRules?: AggregationConfig
     expandCoresOnRegionOpen?: boolean
     filterNonCoreNodes?: boolean
+    filterOrphans?: boolean
   }
 }
 
@@ -92,6 +93,7 @@ export const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
 export const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
 export const graphExpandCoresOnRegionOpen = layoutCfg.graph?.expandCoresOnRegionOpen ?? false
 export const graphFilterNonCoreNodes = layoutCfg.graph?.filterNonCoreNodes ?? true
+export const graphFilterOrphans = layoutCfg.graph?.filterOrphans ?? true
 
 // ===== 组件布局 =====
 
@@ -140,7 +142,7 @@ export const defaultContentPageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes, filterOrphans: graphFilterOrphans },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
@@ -188,7 +190,7 @@ export const virtualNodePageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes },
+      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes, filterOrphans: graphFilterOrphans },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),

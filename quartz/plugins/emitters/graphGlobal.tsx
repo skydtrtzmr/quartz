@@ -245,19 +245,22 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
       const nonOrphanLinks = allLinks.filter(
         (l) => nonOrphanNodeIds.has(l.source) && nonOrphanNodeIds.has(l.target),
       )
-      console.log(`  [Step 4] Non-orphan: ${nonOrphanNodeIds.size} nodes, ${nonOrphanLinks.length} links`)
+      // 根据 filterOrphans 决定后续步骤使用的节点/链接集合
+      const effectiveNodeIds = filterOrphans ? nonOrphanNodeIds : neighbourhood
+      const effectiveLinks = filterOrphans ? nonOrphanLinks : allLinks
+      console.log(`  [Step 4] ${filterOrphans ? "Non-orphan" : "Unfiltered"}: ${effectiveNodeIds.size} nodes, ${effectiveLinks.length} links`)
 
       // ===== Step 5: 核心节点标记 =====
       const coreNodeIdSet = new Set<string>()
       if (coreNodeFilter && coreNodeFilter.length > 0) {
-        for (const nodeId of nonOrphanNodeIds) {
+        for (const nodeId of effectiveNodeIds) {
           const details = contentData.get(nodeId as SimpleSlug)
           if (matchCoreNodeFilter(nodeId, details?.frontmatter, coreNodeFilter)) {
             coreNodeIdSet.add(nodeId)
           }
         }
       } else {
-        for (const nodeId of nonOrphanNodeIds) {
+        for (const nodeId of effectiveNodeIds) {
           if ((nodeLinkCount.get(nodeId) ?? 0) > 2) {
             coreNodeIdSet.add(nodeId)
           }
@@ -277,12 +280,12 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
       console.log(`  [Step 5] Core nodes: ${coreNodeIdSet.size}`)
 
       // ===== Step 6: 邻接映射构建 =====
-      const edgeNodeIdSet = new Set([...nonOrphanNodeIds].filter((id) => !coreNodeIdSet.has(id)))
+      const edgeNodeIdSet = new Set([...effectiveNodeIds].filter((id) => !coreNodeIdSet.has(id)))
       const nodeToEdgeNodeIds: Record<string, string[]> = {}
       const nodeToEdgeLinkIndices: Record<string, number[]> = {}
 
-      for (let li = 0; li < nonOrphanLinks.length; li++) {
-        const l = nonOrphanLinks[li]
+      for (let li = 0; li < effectiveLinks.length; li++) {
+        const l = effectiveLinks[li]
         const srcIsEdge = edgeNodeIdSet.has(l.source)
         const tgtIsEdge = edgeNodeIdSet.has(l.target)
         if (srcIsEdge && !tgtIsEdge) {
@@ -370,7 +373,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
               // 收集子节点间链接
               const childLinkIndices: number[] = []
               const childLinkKeySet = new Set<string>()
-              for (const l of nonOrphanLinks) {
+              for (const l of effectiveLinks) {
                 if (childIds.includes(l.source) || childIds.includes(l.target)) {
                   const key = `${l.source}->${l.target}`
                   if (!childLinkKeySet.has(key)) {
@@ -427,7 +430,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
             newEdgeIds.push(edgeId)
             const coreIdx = nodeToEdgeLinkIndices[coreId] ?? []
             for (const li of coreIdx) {
-              const l = nonOrphanLinks[li]
+              const l = effectiveLinks[li]
               if (l && (l.source === edgeId || l.target === edgeId)) {
                 newLinkIndices.push(li)
                 break
@@ -474,7 +477,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
 
       // ===== Step 9: 节点详情 =====
       const nodeDetails: Record<string, { id: string; text: string; tags: string[]; frontmatter?: Record<string, unknown> }> = {}
-      for (const nodeId of nonOrphanNodeIds) {
+      for (const nodeId of effectiveNodeIds) {
         const details = contentData.get(nodeId as SimpleSlug)
         nodeDetails[nodeId] = {
           id: nodeId,
@@ -509,7 +512,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
         const crossRegionEdgeIds = new Set<string>()
         for (const edgeId of edgeNodeIdSet) {
           const neighborRegions = new Set<string>()
-          for (const l of nonOrphanLinks) {
+          for (const l of effectiveLinks) {
             const otherId = l.source === edgeId ? l.target : l.target === edgeId ? l.source : null
             if (otherId && coreToRegion[otherId]) neighborRegions.add(coreToRegion[otherId])
           }
@@ -523,7 +526,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
             : [...crossRegionEdgeIds]),
         ]
         const visibleSet = new Set(firstScreenNodeIds)
-        firstScreenLinks = nonOrphanLinks.filter(
+        firstScreenLinks = effectiveLinks.filter(
           (l) => visibleSet.has(l.source) && visibleSet.has(l.target),
         )
       } else {
@@ -535,7 +538,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
           ...(shouldFilterNonCore ? [] : [...edgeNodeIdSet]),
         ]
         const visibleSet = new Set(firstScreenNodeIds)
-        firstScreenLinks = nonOrphanLinks.filter(
+        firstScreenLinks = effectiveLinks.filter(
           (l) => visibleSet.has(l.source) && visibleSet.has(l.target),
         )
         // 聚合节点→核心节点的边

@@ -107,7 +107,7 @@ const defaultOptions: GraphOptions = {
     // [CONFIG] 默认关闭全局图谱节点的数字徽章
     showBadge: false,
     // [CONFIG] 全局图谱默认过滤孤儿节点
-    filterOrphans: true,
+    filterOrphans: false,
     // [CONFIG] 全局图谱默认收起边缘节点
     startCollapsed: true,
     // [CONFIG] 全局图谱：关联数≥3才显示中心数字，超过99显示99+

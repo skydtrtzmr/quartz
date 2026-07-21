@@ -7,6 +7,7 @@ import {
   graphCoreNodeLimit,
   graphRegionRules,
   graphFilterNonCoreNodes,
+  graphFilterOrphans,
 } from "./quartz.layout"
 import fs from "fs"
 import path from "path"
@@ -109,6 +110,7 @@ const config: QuartzConfig = {
         regionRules: graphRegionRules,
         aggregation: graphAggregation,
         filterNonCoreNodes: graphFilterNonCoreNodes,
+        filterOrphans: graphFilterOrphans,
       }),
       // 必须在 ContentIndex 之后，生成精简版图谱所需数据。
       Plugin.GraphLocalEmitter({
