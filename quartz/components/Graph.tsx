@@ -8,13 +8,26 @@ import { AggregationConfig, CoreNodeFilterConfig } from "../util/aggregation"
 
 function getBasePath(baseUrl: string | undefined): string {
   if (!baseUrl) return ""
-  try {
-    const url = new URL(`https://${baseUrl}`)
-    return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
-  } catch {
-    // 如果不是完整 URL，直接返回（去掉开头的 /）
-    return baseUrl.replace(/^\//, "").replace(/\/.*$/, "")
+  // 如果已经是完整 URL（含协议），直接解析提取 pathname
+  if (baseUrl.includes("://")) {
+    try {
+      const url = new URL(baseUrl)
+      return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
+    } catch {
+      return ""
+    }
   }
+  // 如果包含 : 或 .（如 127.0.0.1:8767/xm 或 example.com），尝试解析为 URL
+  if (baseUrl.includes(":") || baseUrl.includes(".")) {
+    try {
+      const url = new URL(`https://${baseUrl}`)
+      return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
+    } catch {
+      // 解析失败，fall through
+    }
+  }
+  // 否则作为路径返回（去掉开头和结尾的 /）
+  return baseUrl.replace(/^\//, "").replace(/\/$/, "")
 }
 
 export interface D3Config {

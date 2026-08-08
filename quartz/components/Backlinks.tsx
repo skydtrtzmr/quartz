@@ -111,12 +111,26 @@ export default ((opts?: Partial<BacklinksOptions>) => {
     // 从 cfg.baseUrl 获取 basePath (多域名支持，与 Graph 组件一致)
     const getBasePath = (baseUrl: string | undefined): string => {
       if (!baseUrl) return ""
-      try {
-        const url = new URL(`https://${baseUrl}`)
-        return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
-      } catch {
-        return ""
+      // 如果已经是完整 URL（含协议），直接解析提取 pathname
+      if (baseUrl.includes("://")) {
+        try {
+          const url = new URL(baseUrl)
+          return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
+        } catch {
+          return ""
+        }
       }
+      // 如果包含 : 或 .（如 127.0.0.1:8767/xm 或 example.com），尝试解析为 URL
+      if (baseUrl.includes(":") || baseUrl.includes(".")) {
+        try {
+          const url = new URL(`https://${baseUrl}`)
+          return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
+        } catch {
+          // 解析失败，fall through
+        }
+      }
+      // 否则作为路径返回（去掉开头和结尾的 /）
+      return baseUrl.replace(/^\//, "").replace(/\/$/, "")
     }
     const basePath = getBasePath(cfg.baseUrl)
     return (
