@@ -120,8 +120,9 @@ export default ((opts?: Partial<BacklinksOptions>) => {
           return ""
         }
       }
-      // 如果包含 : 或 .（如 127.0.0.1:8767/xm 或 example.com），尝试解析为 URL
-      if (baseUrl.includes(":") || baseUrl.includes(".")) {
+      // 不含协议但含 /（如 "localhost/demo-core" 或 "127.0.0.1:8766/demo-core"），
+      // 补全 https:// 后用 URL 解析提取 pathname
+      if (baseUrl.includes("/")) {
         try {
           const url = new URL(`https://${baseUrl}`)
           return url.pathname === "/" ? "" : url.pathname.replace(/^\//, "")
@@ -129,7 +130,7 @@ export default ((opts?: Partial<BacklinksOptions>) => {
           // 解析失败，fall through
         }
       }
-      // 否则作为路径返回（去掉开头和结尾的 /）
+      // 否则作为纯路径返回（去掉开头和结尾的 /）
       return baseUrl.replace(/^\//, "").replace(/\/$/, "")
     }
     const basePath = getBasePath(cfg.baseUrl)
