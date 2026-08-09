@@ -491,8 +491,8 @@ async function setupSearch(searchElement: Element, currentSlug: FullSlug, data: 
     
     if (finalResults.length === 0) {
       results.innerHTML = `<a class="result-card no-match">
-          <h3>No results.</h3>
-          <p>Try another search term?</p>
+          <h3>没有搜索结果。</h3>
+          <p>请尝试更换搜索词。</p>
       </a>`
     } else {
       // 显示统计信息
