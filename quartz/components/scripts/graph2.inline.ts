@@ -2100,8 +2100,14 @@ function main() {
                 edgeLinksToAdd.push(subAggLink)
               }
             } else {
-              // 所有剩余规则都无效，直接显示原始叶子
+              // 所有剩余规则都无效，直接显示原始叶子，并添加聚合节点到叶子的连线
               edgeNodesToAdd = childNodes
+              const parentNodeRef = graphData.nodes.find((n) => n.id === nodeId)
+              if (parentNodeRef) {
+                for (const child of childNodes) {
+                  edgeLinksToAdd.push({ source: parentNodeRef, target: child })
+                }
+              }
             }
           }
         } else {
