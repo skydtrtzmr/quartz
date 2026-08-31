@@ -93,7 +93,7 @@ export const graphCoreNodeLimit = layoutCfg.graph?.coreNodeLimit ?? undefined
 export const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
 export const graphExpandCoresOnRegionOpen = layoutCfg.graph?.expandCoresOnRegionOpen ?? false
 export const graphFilterNonCoreNodes = layoutCfg.graph?.filterNonCoreNodes ?? true
-export const graphFilterOrphans = layoutCfg.graph?.filterOrphans ?? true
+export const graphFilterOrphans = layoutCfg.graph?.filterOrphans ?? false
 
 // ===== 组件布局 =====
 

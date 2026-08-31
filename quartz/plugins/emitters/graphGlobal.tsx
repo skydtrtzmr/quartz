@@ -432,7 +432,12 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
             for (const li of coreIdx) {
               const l = effectiveLinks[li]
               if (l && (l.source === edgeId || l.target === edgeId)) {
-                newLinkIndices.push(li)
+                // [FIX] 链接统一写入 childLinksPool 并存其索引，
+                // 与运行时 pc.allChildLinks[linkIndices[i]] 的查询保持同一索引空间。
+                // 之前存的是 effectiveLinks 的索引，但该数组不输出到 JSON，
+                // 导致未走聚合的核心节点展开后边缘节点没有边。
+                childLinksPool.push({ source: l.source, target: l.target, sourceField: l.sourceField })
+                newLinkIndices.push(childLinksPool.length - 1)
                 break
               }
             }
