@@ -53,11 +53,15 @@ interface PreRegionNodeInfo {
   childCoreIds: string[]
   remainingRules: AggregationRule[]
   currentField: string
+  /** 显示文本（folder 规则时优先用目录 index.md 的 title） */
+  displayText: string
 }
 
 interface GlobalGraphPrecomputed {
   version: number
   generatedAt: number
+  /** 目录显示名映射（目录路径 → 目录 index.md 的 frontmatter.title），供运行时 folder 分组显示使用 */
+  folderTitles: Record<string, string>
   config: {
     aggregation?: AggregationRule[]
     regionRules?: AggregationRule[]
@@ -164,6 +168,22 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
     const entryCount = contentData.size
     console.log(`[GraphGlobal] Starting precomputation with ${entryCount} entries...`)
     const totalStart = performance.now()
+
+      // ===== Step 1: 构建目录显示名映射 =====
+      // Quartz 中目录 index.md 的 slug 恰好等于目录路径（如 person/index.md → person），
+      // 因此目录的显示名可以直接通过该 slug 查到其 frontmatter.title
+      const folderTitles: Record<string, string> = {}
+      for (const [slug, details] of contentData.entries()) {
+        const rel = details.filePath as unknown as string | undefined
+        if (rel && (rel === "index.md" || rel.endsWith("/index.md"))) {
+          const t = details.frontmatter?.title
+          if (typeof t === "string" && t.trim() !== "") {
+            folderTitles[slug] = t.trim()
+          }
+        }
+      }
+      /** folder 分组的显示名：目录 index.md 有 title 时用 title，否则用目录路径 */
+      const folderDisplay = (groupKey: string): string => folderTitles[groupKey] ?? groupKey
 
       // ===== Step 2: 虚拟节点计算 =====
       const virtualNodes = new Set<string>()
@@ -365,9 +385,12 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
               const aggId = `agg:${coreId}:${rule.type}:${rule.field ?? ""}:${groupKey}`
 
               // 生成显示文本（与 graph3.inline.ts 运行时路径一致）
+              // folder 分组：优先用目录 index.md 的 frontmatter.title 作为显示名
               const displayPrefix = rule.type === "folder" ? "📁 " : ""
-              const displayText = rule.type === "folder" && groupKey === "/"
-                ? "📁 根目录"
+              const displayText = rule.type === "folder"
+                ? (groupKey === "/"
+                    ? `📁 ${folderTitles["/"] ?? "根目录"}`
+                    : `📁 ${folderDisplay(groupKey)}`)
                 : `${displayPrefix}${groupKey}`
 
               // 收集子节点间链接
@@ -474,6 +497,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
             childCoreIds,
             remainingRules: regionRules.slice(1),
             currentField: rule.type === "folder" ? "📁" : (rule.field ?? rule.type),
+            displayText: rule.type === "folder" ? folderDisplay(groupKey) : groupKey,
           }
           for (const cid of childCoreIds) coreToRegion[cid] = regionId
         }
@@ -499,10 +523,10 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
           tags: [],
         }
       }
-      for (const regionId of Object.keys(regionNodes)) {
+      for (const [regionId, info] of Object.entries(regionNodes)) {
         nodeDetails[regionId] = {
           id: regionId,
-          text: regionId.replace("region:", ""),
+          text: info.displayText,
           tags: [],
         }
       }
@@ -558,6 +582,7 @@ export const GraphGlobal: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
       const result: GlobalGraphPrecomputed = {
         version: 1,
         generatedAt: Date.now(),
+        folderTitles,
         config: {
           aggregation: aggregation.length > 0 ? aggregation : undefined,
           regionRules: regionRules.length > 0 ? regionRules : undefined,

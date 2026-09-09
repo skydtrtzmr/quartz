@@ -127,6 +127,8 @@ interface GlobalGraphPrecomputed {
   coreNodeIds: string[]
   edgeNodeIds: string[]
   nodeLinkCounts: Record<string, number>
+  /** 目录显示名映射（目录路径 → 目录 index.md 的 frontmatter.title），旧版 JSON 无此字段 */
+  folderTitles?: Record<string, string>
 }
 
 async function fetchGlobalGraphPrecomputed(basePath: string): Promise<GlobalGraphPrecomputed | null> {
@@ -458,6 +460,10 @@ function main() {
     let aggToCoreMap: Map<SimpleSlug, SimpleSlug> = new Map()
     let regionNodeInfoMap: Map<SimpleSlug, any> = new Map()
     let coreToRegionMap: Map<SimpleSlug, SimpleSlug> = new Map()
+    // [FOLDER-TITLE] 目录显示名映射（目录路径 → 目录 index.md 的 frontmatter.title）
+    let folderTitleMap: Map<string, string> = new Map()
+    /** folder 分组的显示名：目录 index.md 有 title 时用 title，否则用目录路径 */
+    const folderDisplay = (groupKey: string): string => folderTitleMap.get(groupKey) ?? groupKey
     let graphData: { nodes: NodeData[]; links: LinkData[] }
     let allLinks: LinkData[] = []
 
@@ -479,6 +485,8 @@ function main() {
 
       // 从 nodeDetails 构建 contentData（供 expandNode 的 frontmatter 分组使用）
       const pc = globalPrecomputed
+      // [FOLDER-TITLE] 从预计算 JSON 恢复目录显示名映射
+      folderTitleMap = new Map(Object.entries(pc.folderTitles ?? {}))
       for (const [id, detail] of Object.entries(pc.nodeDetails)) {
         contentData.set(id as SimpleSlug, {
           slug: id as any,
@@ -625,6 +633,16 @@ function main() {
 
       console.log(`[GRAPH3] 预计算数据构建完成: ${(performance.now() - t0).toFixed(1)}ms, ${firstScreenNodes.length} nodes, ${firstScreenLinks.length} links`)
     } else {
+    // [FOLDER-TITLE] 运行时计算路径：从 contentData 构建目录显示名映射
+    // （Quartz 中目录 index.md 的 slug 恰好等于目录路径）
+    folderTitleMap = new Map()
+    for (const [slug, details] of contentData.entries()) {
+      const rel = details.filePath as unknown as string | undefined
+      if (rel && (rel === "index.md" || rel.endsWith("/index.md"))) {
+        const t = details.frontmatter?.title
+        if (typeof t === "string" && t.trim() !== "") folderTitleMap.set(slug, t.trim())
+      }
+    }
     const virtualNodes = new Set<SimpleSlug>()
     const allExistingSlugs = new Set(contentData.keys())
     const allTagSlugs = new Set<SimpleSlug>()
@@ -1020,10 +1038,13 @@ function main() {
           }
 
           // 为每个分组创建聚合节点
+          // folder 分组：优先用目录 index.md 的 frontmatter.title 作为显示名
           const displayPrefix = rule.type === "folder" ? "📁 " : ""
           for (const [groupKey, childNodes] of groupMap) {
-            const displayKey = rule.type === "folder" && groupKey === "/"
-              ? "📁 根目录"
+            const displayKey = rule.type === "folder"
+              ? (groupKey === "/"
+                  ? `📁 ${folderTitleMap.get("/") ?? "根目录"}`
+                  : `📁 ${folderDisplay(groupKey)}`)
               : `${displayPrefix}${groupKey}`
             const aggId = `agg:${coreId}:${rule.type}:${rule.field ?? ""}:${groupKey}` as SimpleSlug
             const collapsedR = Math.min(30, Math.max(16, 2 + Math.sqrt(childNodes.length)))
@@ -1186,7 +1207,7 @@ function main() {
         const regionId = `region:${groupKey}` as SimpleSlug
         const regionNode: NodeData = {
           id: regionId,
-          text: groupKey,
+          text: rule.type === "folder" ? folderDisplay(groupKey) : groupKey,
           tags: [],
           isCore: true,
           isRegion: true,
@@ -2083,8 +2104,10 @@ function main() {
               const regionNodeRef = graphData.nodes.find((n) => n.id === nodeId)!
 
               for (const [groupKey, groupCores] of effectiveGroupMap) {
-                const displayKey = effectiveRule.type === "folder" && groupKey === "/"
-                  ? "📁 根目录"
+                const displayKey = effectiveRule.type === "folder"
+                  ? (groupKey === "/"
+                      ? `📁 ${folderTitleMap.get("/") ?? "根目录"}`
+                      : `📁 ${folderDisplay(groupKey)}`)
                   : `${displayPrefix}${groupKey}`
                 const subAggId = `agg:region:${nodeId}:${effectiveRule.type}:${effectiveRule.field ?? ""}:${groupKey}` as SimpleSlug
                 const collapsedR = Math.min(30, Math.max(16, 2 + Math.sqrt(groupCores.length)))
@@ -2293,8 +2316,10 @@ function main() {
               const remainingRulesAfter = aggInfo.remainingRules.slice(effectiveRuleIdx + 1)
               const displayPrefix = effectiveRule.type === "folder" ? "📁 " : ""
               for (const [groupKey, groupLeaves] of effectiveGroupMap) {
-                const displayKey = effectiveRule.type === "folder" && groupKey === "/"
-                  ? "📁 根目录"
+                const displayKey = effectiveRule.type === "folder"
+                  ? (groupKey === "/"
+                      ? `📁 ${folderTitleMap.get("/") ?? "根目录"}`
+                      : `📁 ${folderDisplay(groupKey)}`)
                   : `${displayPrefix}${groupKey}`
                 const subAggId = `agg:sub:${nodeId}:${effectiveRule.type}:${effectiveRule.field ?? ""}:${groupKey}` as SimpleSlug
                 const collapsedR = Math.min(24, Math.max(12, 2 + Math.sqrt(groupLeaves.length)))
