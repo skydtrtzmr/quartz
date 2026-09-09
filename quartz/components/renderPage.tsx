@@ -23,6 +23,14 @@ interface RenderComponents {
 }
 
 const headerRegex = new RegExp(/h[1-6]/)
+// index.css 与全局脚本使用固定文件名。构建版本写入 URL，确保已打开页面在重建后
+// 不会继续复用浏览器中带一年缓存的旧资源。
+const buildResourceVersion = Date.now().toString(36)
+
+function withBuildVersion(path: string): string {
+  return `${path}?v=${buildResourceVersion}`
+}
+
 export function pageResources(
   baseDir: FullSlug | RelativeURL,
   staticResources: StaticResources,
@@ -35,13 +43,13 @@ export function pageResources(
   const resources: StaticResources = {
     css: [
       {
-        content: joinSegments(baseDir, "index.css"),
+        content: withBuildVersion(joinSegments(baseDir, "index.css")),
       },
       ...staticResources.css,
     ],
     js: [
       {
-        src: joinSegments(baseDir, "prescript.js"),
+        src: withBuildVersion(joinSegments(baseDir, "prescript.js")),
         loadTime: "beforeDOMReady",
         contentType: "external",
       },
@@ -63,7 +71,7 @@ export function pageResources(
   }
 
   resources.js.push({
-    src: joinSegments(baseDir, "postscript.js"),
+    src: withBuildVersion(joinSegments(baseDir, "postscript.js")),
     loadTime: "afterDOMReady",
     moduleType: "module",
     contentType: "external",

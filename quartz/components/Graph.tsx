@@ -68,6 +68,8 @@ export interface D3Config {
   expandCoresOnRegionOpen?: boolean
   /** [CONFIG] 全局图谱首屏是否过滤掉不符合 coreNodeFilter 的非核心节点（仅当配置了 coreNodeFilter 时生效）。默认 true。 */
   filterNonCoreNodes?: boolean
+  /** [CONFIG] 用 frontmatter 字段为普通图谱节点分配分类颜色，例如 `type`。 */
+  colorBy?: string
 }
 
 interface GraphOptions {
@@ -85,7 +87,8 @@ const defaultOptions: GraphOptions = {
     repelForce: 0.6,
     centerForce: 0.3,
     linkDistance: 70,
-    fontSize: 0.6,
+    // 局部图谱容器较小，默认标签放大以提高节点名称可读性。
+    fontSize: 0.75,
     opacityScale: 1,
     showTags: true,
     removeTags: [],
@@ -154,7 +157,7 @@ export default ((opts?: Partial<GraphOptions>) => {
             data-cfg={JSON.stringify(localGraph)}
             data-precompute-depth={precomputeDepth}
           ></div>
-          <button class="global-graph-icon" aria-label="Global Graph">
+          <button class="global-graph-icon" aria-label="Expand Local Graph" title="放大局部图谱">
             <svg
               version="1.1"
               xmlns="http://www.w3.org/2000/svg"
@@ -186,6 +189,8 @@ export default ((opts?: Partial<GraphOptions>) => {
             class="global-graph-container"
             data-basepath={basePath}
             data-cfg={JSON.stringify(globalGraph)}
+            data-global-cfg={JSON.stringify(globalGraph)}
+            data-precompute-depth={precomputeDepth}
           ></div>
         </div>
       </div>

@@ -7,25 +7,27 @@ import { ContentDetails } from "./contentIndex"
 interface LocalGraphEdge {
   source: SimpleSlug
   target: SimpleSlug
-  sourceField?: string  // frontmatter field name, undefined for body references
+  sourceField?: string // frontmatter field name, undefined for body references
 }
 
 // LocalGraphData.nodes 使用与 ContentDetails 一致的结构
 // 这样 graph2.inline.ts 可以用相同的逻辑解析
 interface LocalGraphData {
   version: number
-  center: SimpleSlug     // center node slug (renamed from 'slug' for clarity)
+  center: SimpleSlug // center node slug (renamed from 'slug' for clarity)
   depth: number
   generatedAt: number
   // nodes 格式与 contentIndex.json 中的条目格式一致
   nodes: Record<SimpleSlug, ContentDetails>
   edges: LocalGraphEdge[]
+  /** 目录路径到 index.md frontmatter.title 的映射，供局部图谱聚合显示使用。 */
+  folderTitles: Record<string, string>
 }
 
 interface Options {
   // depth 已移除，统一使用 cfg.graph.localDepth
-  showTags: boolean,
-  removeTags: string[],
+  showTags: boolean
+  removeTags: string[]
 }
 
 const defaultOptions: Options = {
@@ -37,7 +39,7 @@ const defaultOptions: Options = {
 function djb2Hash(message: string): string {
   let hash = 5381
   for (let i = 0; i < message.length; i++) {
-    hash = ((hash << 5) + hash) + message.charCodeAt(i)
+    hash = (hash << 5) + hash + message.charCodeAt(i)
     hash = hash & 0xffffffff
   }
   return (hash >>> 0).toString(16).padStart(8, "0")
@@ -51,6 +53,24 @@ function getLocalGraphPath(slug: SimpleSlug): string {
   const dir1 = hash.slice(0, 2)
   const dir2 = hash.slice(2, 4)
   return `${dir1}/${dir2}/${slug}`
+}
+
+function buildFolderTitles(linkIndex: Map<SimpleSlug, ContentDetails>): Record<string, string> {
+  const folderTitles: Record<string, string> = {}
+  for (const [slug, details] of linkIndex.entries()) {
+    const filePath = details.filePath as unknown as string | undefined
+    const title = details.frontmatter?.title
+    if (
+      filePath &&
+      (filePath === "index.md" || filePath.endsWith("/index.md")) &&
+      typeof title === "string" &&
+      title.trim() !== ""
+    ) {
+      const key = slug === "/" ? "/" : slug.replace(/^\/+|\/+$/g, "")
+      folderTitles[key] = title.trim()
+    }
+  }
+  return folderTitles
 }
 
 // Find frontmatter field containing the target link
@@ -89,6 +109,7 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
     allTags: Set<SimpleSlug>,
     depth: number,
   ) {
+    const folderTitles = buildFolderTitles(linkIndex)
     const createVirtualContentDetails = (slug: SimpleSlug, isTag: boolean): ContentDetails => ({
       slug: slug as unknown as FullSlug,
       filePath: "" as any,
@@ -117,6 +138,7 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
         validLinks,
         virtualNodes,
         depth,
+        folderTitles,
       )
 
       const path = getLocalGraphPath(slug)
@@ -244,13 +266,16 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
         }
       }
       const validLinks = new Set([...allExistingSlugs, ...allTags, ...virtualNodes])
+      const folderTitles = buildFolderTitles(linkIndex)
 
       // 确定受影响的 slug：变更文件 + 入链/出链邻居
       const affectedSlugs = new Set<SimpleSlug>()
       const deletedSlugs = new Set<SimpleSlug>()
 
       for (const evt of changeEvents) {
-        const slug = simplifySlug(evt.file?.data.slug ?? (evt.path.replace(/\.md$/, "") as SimpleSlug))
+        const slug = simplifySlug(
+          evt.file?.data.slug ?? (evt.path.replace(/\.md$/, "") as SimpleSlug),
+        )
         affectedSlugs.add(slug)
 
         if (evt.type === "delete") {
@@ -300,7 +325,9 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
 
       const depth = cfg.graph?.localDepth ?? 1
       console.log(`[GraphLocal] Incremental update (depth=${depth})...`)
-      console.log(`[GraphLocal] Changed files: ${changeEvents.length}, Affected pages: ${slugsToGenerate.size}`)
+      console.log(
+        `[GraphLocal] Changed files: ${changeEvents.length}, Affected pages: ${slugsToGenerate.size}`,
+      )
 
       let count = 0
       const createVirtualContentDetails = (slug: SimpleSlug, isTag: boolean): ContentDetails => ({
@@ -321,7 +348,15 @@ export const GraphLocalEmitter: QuartzEmitterPlugin<Partial<Options>> = (opts) =
           centerData = createVirtualContentDetails(slug, allTags.has(slug))
         }
 
-        const localGraph = calculateLocalGraph(slug, centerData, linkIndex, validLinks, virtualNodes, depth)
+        const localGraph = calculateLocalGraph(
+          slug,
+          centerData,
+          linkIndex,
+          validLinks,
+          virtualNodes,
+          depth,
+          folderTitles,
+        )
         const path = getLocalGraphPath(slug)
         const fp = ("graph/local/" + path) as FullSlug
 
@@ -340,7 +375,8 @@ function calculateLocalGraph(
   linkIndex: Map<SimpleSlug, ContentDetails>,
   validLinks: Set<SimpleSlug>,
   virtualNodes: Set<SimpleSlug>,
-  depth: number
+  depth: number,
+  folderTitles: Record<string, string>,
 ): LocalGraphData {
   // nodes uses Record format consistent with contentIndex.json
   const nodes: Record<SimpleSlug, ContentDetails> = {}
@@ -391,7 +427,7 @@ function calculateLocalGraph(
       // Process tags
       for (const tag of currentData.tags) {
         const tagSlug = simplifySlug(("tags/" + tag) as FullSlug)
-        
+
         // Tag node: create minimal ContentDetails-like structure
         nodes[tagSlug] = {
           slug: tagSlug as unknown as FullSlug,
@@ -401,7 +437,7 @@ function calculateLocalGraph(
           tags: [],
           content: "",
         }
-        
+
         edges.push({ source: current, target: tagSlug })
         queue.push({ slug: tagSlug, depth: currentDepth + 1 })
       }
@@ -411,11 +447,11 @@ function calculateLocalGraph(
     if (currentDepth === 0 || (currentIsVirtual && currentDepth < depth)) {
       for (const [source, details] of linkIndex.entries()) {
         if (source === current) continue
-        
+
         const outgoing = details.links ?? []
         if (outgoing.includes(current)) {
           const sourceField = getFrontmatterFieldForLink(details.frontmatter, current as string)
-          
+
           nodes[source] = details
           edges.push({ source, target: current, sourceField })
           // Only expand from center (depth 0), not from incoming nodes
@@ -431,6 +467,7 @@ function calculateLocalGraph(
     generatedAt: Date.now(),
     nodes,
     edges,
+    folderTitles,
   }
 }
 

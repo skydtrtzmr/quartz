@@ -39,7 +39,9 @@ let layoutCfg: LayoutConfig = {}
 // ===== 读取 layout.json =====
 
 let settingsPath: string | undefined
-const settingsArgIdx = process.argv.findIndex((a) => a === "--settings" || a.startsWith("--settings="))
+const settingsArgIdx = process.argv.findIndex(
+  (a) => a === "--settings" || a.startsWith("--settings="),
+)
 if (settingsArgIdx !== -1) {
   const arg = process.argv[settingsArgIdx]
   if (arg.startsWith("--settings=")) {
@@ -94,6 +96,7 @@ export const graphRegionRules = layoutCfg.graph?.regionRules ?? undefined
 export const graphExpandCoresOnRegionOpen = layoutCfg.graph?.expandCoresOnRegionOpen ?? false
 export const graphFilterNonCoreNodes = layoutCfg.graph?.filterNonCoreNodes ?? true
 export const graphFilterOrphans = layoutCfg.graph?.filterOrphans ?? false
+export const graphColorBy = layoutCfg.graph?.colorBy ?? undefined
 
 // ===== 组件布局 =====
 
@@ -141,8 +144,17 @@ export const defaultContentPageLayout: PageLayout = {
   ],
   right: [
     Component.Graph({
-      localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes, filterOrphans: graphFilterOrphans },
+      localGraph: { aggregation: graphAggregation, colorBy: graphColorBy },
+      globalGraph: {
+        aggregation: graphAggregation,
+        colorBy: graphColorBy,
+        coreNodeFilter: graphCoreNodeFilter,
+        coreNodeLimit: graphCoreNodeLimit,
+        regionRules: graphRegionRules,
+        expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen,
+        filterNonCoreNodes: graphFilterNonCoreNodes,
+        filterOrphans: graphFilterOrphans,
+      },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
@@ -190,10 +202,18 @@ export const virtualNodePageLayout: PageLayout = {
   right: [
     Component.Graph({
       localGraph: { aggregation: graphAggregation },
-      globalGraph: { aggregation: graphAggregation, coreNodeFilter: graphCoreNodeFilter, coreNodeLimit: graphCoreNodeLimit, regionRules: graphRegionRules, expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen, filterNonCoreNodes: graphFilterNonCoreNodes, filterOrphans: graphFilterOrphans },
+      globalGraph: {
+        aggregation: graphAggregation,
+        colorBy: graphColorBy,
+        coreNodeFilter: graphCoreNodeFilter,
+        coreNodeLimit: graphCoreNodeLimit,
+        regionRules: graphRegionRules,
+        expandCoresOnRegionOpen: graphExpandCoresOnRegionOpen,
+        filterNonCoreNodes: graphFilterNonCoreNodes,
+        filterOrphans: graphFilterOrphans,
+      },
     }),
     Component.DesktopOnly(Component.TableOfContents()),
     Component.Backlinks(backlinksCfg),
   ],
 }
-
