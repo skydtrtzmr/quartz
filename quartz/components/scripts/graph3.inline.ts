@@ -509,6 +509,10 @@ function main() {
       for (const [key, title] of Object.entries(localGraphData?.folderTitles ?? {})) {
         folderTitleMap.set(normalizeFolderKey(key), title)
       }
+      console.log(
+        `[DBG-folderTitle] local/预计算路径: size=${folderTitleMap.size}, ` +
+          `keys=[${[...folderTitleMap.keys()].join(",")}]`,
+      )
     }
     let graphData: { nodes: NodeData[]; links: LinkData[] }
     let allLinks: LinkData[] = []
@@ -724,6 +728,10 @@ function main() {
           if (typeof t === "string" && t.trim() !== "") folderTitleMap.set(slug, t.trim())
         }
       }
+      console.log(
+        `[DBG-folderTitle] fallback/BFS路径: size=${folderTitleMap.size}, ` +
+          `keys=[${[...folderTitleMap.keys()].join(",")}]`,
+      )
       const virtualNodes = new Set<SimpleSlug>()
       const allExistingSlugs = new Set(contentData.keys())
       const allTagSlugs = new Set<SimpleSlug>()
@@ -1143,6 +1151,14 @@ function main() {
             // folder 分组：优先用目录 index.md 的 frontmatter.title 作为显示名
             const displayPrefix = rule.type === "folder" ? "📁 " : ""
             for (const [groupKey, childNodes] of groupMap) {
+              if (rule.type === "folder") {
+                console.log(
+                  `[DBG-folderTitle] agg: graph=${isGlobalGraph ? "global" : "local"} ` +
+                    `groupKey="${groupKey}" normalized="${normalizeFolderKey(groupKey)}" ` +
+                    `hit="${folderTitleMap.get(normalizeFolderKey(groupKey)) ?? "∅"}" ` +
+                    `mapSize=${folderTitleMap.size} keys=[${[...folderTitleMap.keys()].join(",")}]`,
+                )
+              }
               const displayKey =
                 rule.type === "folder"
                   ? groupKey === "/"
@@ -1630,6 +1646,48 @@ function main() {
       return categoryPalette[Math.abs(hash) % categoryPalette.length]
     }
 
+    // [STYLE] 大文件夹 / 大区分色调色板（品牌蓝为固定首色，色轮均分；浅深两套明度）
+    const folderPaletteLight = [
+      "#0369a1", "#0d9488", "#7c3aed", "#ea580c", "#16a34a", "#db2777", "#ca8a04", "#4f46e5",
+    ]
+    const folderPaletteDark = [
+      "#38bdf8", "#2dd4bf", "#a78bfa", "#fb923c", "#4ade80", "#f472b6", "#facc15", "#818cf8",
+    ]
+    const folderPalette =
+      document.documentElement.getAttribute("saved-theme") === "dark"
+        ? folderPaletteDark
+        : folderPaletteLight
+
+    // 大区 → 颜色：按 regionNodeInfoMap 插入顺序用索引分配（与 groupKey 内容无关，
+    // 规避已知的 groupKey 尾部空格等脏数据导致的问题）
+    const regionColorMap = new Map<SimpleSlug, string>()
+    {
+      let _ri = 0
+      for (const id of regionNodeInfoMap.keys()) {
+        regionColorMap.set(id, folderPalette[_ri++ % folderPalette.length])
+      }
+    }
+
+    // 一级目录 → 颜色（不在任何大区内的散点节点兜底）
+    const folderColorMap = new Map<string, string>()
+    const folderColor = (id: string): string => {
+      const seg = id.split("/")[0]
+      if (!folderColorMap.has(seg)) {
+        folderColorMap.set(seg, folderPalette[folderColorMap.size % folderPalette.length])
+      }
+      return folderColorMap.get(seg)!
+    }
+
+    // 连线颜色：跟随 source 端（核心/大区）的区色，从"一片灰线"变为按区着色的关系网
+    const linkColor = (ld: { source: NodeData; target: NodeData }): string => {
+      const src = ld.source
+      if (src.isAggregation) return computedStyleMap["--tertiary"]
+      if (src.isRegion) return regionColorMap.get(src.id) ?? computedStyleMap["--lightgray"]
+      const rid = coreToRegionMap.get(src.id)
+      if (rid) return regionColorMap.get(rid) ?? computedStyleMap["--lightgray"]
+      return computedStyleMap["--lightgray"]
+    }
+
     const color = (d: NodeData) => {
       const isCurrent = d.id === slug
       if (isCurrent) return computedStyleMap["--secondary"]
@@ -1641,8 +1699,12 @@ function main() {
           return categoryColor(String(value))
         }
       }
-      if (visited.has(d.id)) return computedStyleMap["--tertiary"]
-      return computedStyleMap["--gray"]
+      // [STYLE] 按大区 / 一级目录分色（替代原先统一 --gray 的单色观感）；
+      // 区内节点继承大区色，展开后归属感一眼可见
+      const rid = coreToRegionMap.get(d.id)
+      if (rid) return regionColorMap.get(rid) ?? folderColor(d.id)
+      if (d.isRegion) return regionColorMap.get(d.id) ?? computedStyleMap["--secondary"]
+      return folderColor(d.id)
     }
 
     let hoveredNodeId: string | null = null
@@ -1680,10 +1742,8 @@ function main() {
       const tweenGroup = new TweenGroup()
       for (const l of linkRenderData) {
         const isAgg = l.isAggregation
+        const defaultColor = isAgg ? computedStyleMap["--tertiary"] : linkColor(l.simulationData)
         const defaultAlpha = isAgg ? 0.35 : 1
-        const defaultColor = isAgg
-          ? computedStyleMap["--tertiary"]
-          : computedStyleMap["--lightgray"]
         const alpha = hoveredNodeId ? (l.active ? 1 : defaultAlpha * 0.3) : defaultAlpha
         l.color = l.active ? computedStyleMap["--gray"] : defaultColor
         tweenGroup.add(new Tweened<LinkRenderData>(l).to({ alpha }, 200))
@@ -1940,9 +2000,10 @@ function main() {
       gfx.label = nodeId
       gfx.hitArea = new Circle(0, 0, r + 8)
       if (isRegionNode) {
-        // 大区节点：较高透明度填充（遮住内部连线）+ 虚线边框
-        gfx.circle(0, 0, r).fill({ color: computedStyleMap["--secondary"], alpha: 0.18 })
-        drawDashedCircle(gfx, 0, 0, r, 6, 4, computedStyleMap["--secondary"], 0.5, 2)
+        // 大区节点：按区分色填充 + 同色虚线边框
+        const regionColor = regionColorMap.get(nodeId) ?? computedStyleMap["--secondary"]
+        gfx.circle(0, 0, r).fill({ color: regionColor, alpha: 0.12 })
+        drawDashedCircle(gfx, 0, 0, r, 6, 4, regionColor, 0.55, 2)
       } else if (isAggNode) {
         // 聚合节点（可展开）：双圆环 + 浅色填充，专属标识
         gfx.circle(0, 0, r).fill({ color: computedStyleMap["--secondary"], alpha: 0.08 })
@@ -1951,8 +2012,8 @@ function main() {
           .circle(0, 0, r - 4)
           .stroke({ width: 1, color: computedStyleMap["--secondary"], alpha: 0.2 })
       } else if (n.isCore && !isTagNode) {
-        // 核心节点（可展开）：深色实心圆 + 浅色中心数字，与叶子实心填充明显区分
-        gfx.circle(0, 0, r).fill({ color: color(n), alpha: 0.62 })
+        // 核心节点（可展开）：大区色实心圆 + 浅色中心数字，与叶子实心填充明显区分
+        gfx.circle(0, 0, r).fill({ color: color(n), alpha: 0.85 })
       } else {
         // 叶子节点（不可展开）：实心填充圆，最普通
         gfx.circle(0, 0, r).fill({ color: isTagNode ? computedStyleMap["--light"] : color(n) })
@@ -2136,7 +2197,7 @@ function main() {
         color:
           l.source.isAggregation || l.target.isAggregation
             ? computedStyleMap["--tertiary"]
-            : computedStyleMap["--lightgray"],
+            : linkColor(l),
         alpha: l.source.isAggregation || l.target.isAggregation ? 0.35 : 1,
         active: false,
         isAggregation: l.source.isAggregation || l.target.isAggregation || undefined,

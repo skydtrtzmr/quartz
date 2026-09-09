@@ -114,7 +114,7 @@ const defaultOptions: GraphOptions = {
     repelForce: 1.5,
     centerForce: 0.4,
     linkDistance: 150,
-    fontSize: 0.6,
+    fontSize: 0.72,
     opacityScale: 1,
     showTags: true,
     removeTags: [],
