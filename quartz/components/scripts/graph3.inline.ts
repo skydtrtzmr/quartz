@@ -720,12 +720,20 @@ function main() {
     } else {
       // [FOLDER-TITLE] 运行时计算路径：从 contentData 构建目录显示名映射
       // （Quartz 中目录 index.md 的 slug 恰好等于目录路径）
-      folderTitleMap = new Map()
+      // [FIX] 不能在这里 new Map() 重置：局部图谱的 contentData 只有邻域节点、通常不含
+      // 目录 index 页，重置会把上面已合并的 localGraphData.folderTitles 清空，
+      // 导致聚合节点显示原始目录名（person/task）而非 index.md 的 title。
+      // 这里改为只做补充合并（幂等），保留已有映射。
+      for (const [key, title] of Object.entries(localGraphData?.folderTitles ?? {})) {
+        folderTitleMap.set(normalizeFolderKey(key), title)
+      }
       for (const [slug, details] of contentData.entries()) {
         const rel = details.filePath as unknown as string | undefined
         if (rel && (rel === "index.md" || rel.endsWith("/index.md"))) {
           const t = details.frontmatter?.title
-          if (typeof t === "string" && t.trim() !== "") folderTitleMap.set(slug, t.trim())
+          if (typeof t === "string" && t.trim() !== "") {
+            folderTitleMap.set(normalizeFolderKey(slug), t.trim())
+          }
         }
       }
       console.log(
