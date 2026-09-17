@@ -265,10 +265,19 @@ export const ObsidianFlavoredMarkdown: QuartzTransformerPlugin<Partial<Options>>
                     }
                   } else {
                     const block = anchor
+                    // 空值时不输出裸属性 / "undefined"，保持 HTML 干净
+                    const attrs = [
+                      `class="transclude"`,
+                      `data-url="${url}"`,
+                      block ? `data-block="${block}"` : "",
+                      alias ? `data-embed-alias="${alias}"` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
                     return {
                       type: "html",
                       data: { hProperties: { transclude: true } },
-                      value: `<blockquote class="transclude" data-url="${url}" data-block="${block}" data-embed-alias="${alias}"><a href="${
+                      value: `<blockquote ${attrs}><a href="${
                         url + anchor
                       }" class="transclude-inner">Transclude of ${url}${block}</a></blockquote>`,
                     }
