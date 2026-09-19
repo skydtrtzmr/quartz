@@ -13,6 +13,8 @@ export interface Argv {
   wsPort: number
   remoteDevHost?: string
   concurrency?: number
+  /** serve 模式下的 URL 子路径挂载前缀（--baseDir），CLI 已支持但原类型定义遗漏 */
+  baseDir?: string
 }
 
 export type BuildTimeTrieData = QuartzPluginData & {
