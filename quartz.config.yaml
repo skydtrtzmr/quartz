@@ -6,7 +6,9 @@ configuration:
   enablePopovers: true
   analytics: null
   locale: zh-CN
-  baseUrl: localhost/doc-demo
+  # 注意：baseUrl 决定 body[data-basepath]，必须与 Go server 的服务路径（domain 目录名）一致
+  # 当前对齐 demo-region（settings/demo-region/quartz.config.json 里也是 localhost/demo-region）
+  baseUrl: localhost/demo-region
   defaultDateType: modified
   ignorePatterns:
     - private
@@ -90,8 +92,9 @@ plugins:
     enabled: true
   - source: github:quartz-community/alias-redirects
     enabled: true
+  # 社区版 content-index 已由本地 content-index-pro 替代（补回每页 frontmatter 字段）
   - source: github:quartz-community/content-index
-    enabled: true
+    enabled: false
     options:
       enableSiteMap: true
       enableRSS: true
@@ -121,8 +124,9 @@ plugins:
     layout:
       position: right
       priority: 10
+  # 社区版 search 已由本地 search-pro 替代（结果统计条 + 加载更多分页）
   - source: github:quartz-community/search
-    enabled: true
+    enabled: false
     layout:
       position: left
       priority: 20
@@ -180,7 +184,6 @@ plugins:
     layout:
       position: afterBody
       priority: 10
-  # 社区版 footer 已由本地 footer-pro 替代（源悦科技版权 + 阅读模式横排修复）
   - source: github:quartz-community/footer
     enabled: false
     options:
@@ -238,6 +241,35 @@ plugins:
       links: {}
       copyright: 源悦科技
     order: 50
+  # 本地 content-index-pro：contentIndex.json 保留每页 frontmatter（供字段检索）
+  - source: ../plugins-local/content-index-pro
+    enabled: true
+    options:
+      enableSiteMap: true
+      enableRSS: true
+      rssLimit: 10
+      rssFullHtml: false
+      rssSlug: index
+      includeEmptyFiles: true
+    order: 50
+  # 本地 search-pro：社区版搜索能力 + 结果统计条 + 加载更多分页
+  - source: ../plugins-local/search-pro
+    enabled: true
+    options:
+      enablePreview: true
+      fieldPriority:
+        - title
+        - content
+        - tags
+      initialDisplayCount: 10
+      loadMoreCount: 10
+    order: 50
+    layout:
+      position: left
+      priority: 20
+      group: toolbar
+      groupOptions:
+        grow: true
 layout:
   groups:
     toolbar:

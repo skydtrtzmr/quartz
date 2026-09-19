@@ -1,6 +1,12 @@
 {
   "version": "1.0.0",
   "plugins": {
+    "content-index-pro": {
+      "source": "../plugins-local/content-index-pro",
+      "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\content-index-pro",
+      "commit": "local",
+      "installedAt": "2026-09-19T12:05:21.203Z"
+    },
     "footer-pro": {
       "source": "../plugins-local/footer-pro",
       "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\footer-pro",
@@ -12,6 +18,12 @@
       "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\reader-mode-pro",
       "commit": "local",
       "installedAt": "2026-09-19T07:26:43.536Z"
+    },
+    "search-pro": {
+      "source": "../plugins-local/search-pro",
+      "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\search-pro",
+      "commit": "local",
+      "installedAt": "2026-09-19T12:05:21.205Z"
     }
   }
 }
