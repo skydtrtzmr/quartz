@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "plugins": {
+    "footer-pro": {
+      "source": "../plugins-local/footer-pro",
+      "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\footer-pro",
+      "commit": "local",
+      "installedAt": "2026-09-19T10:01:28.971Z"
+    },
+    "reader-mode-pro": {
+      "source": "../plugins-local/reader-mode-pro",
+      "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\reader-mode-pro",
+      "commit": "local",
+      "installedAt": "2026-09-19T07:26:43.536Z"
+    }
+  }
+}

@@ -339,8 +339,12 @@ export function renderPage(
   const direction = i18n(cfg.locale).direction ?? "ltr"
   // During local dev (--serve), the dev server serves from root without the
   // baseUrl subpath, so basePath must be empty to avoid broken links.
+  // [M] v4→v5 补丁：原逻辑对所有 serve 模式都清空 basePath，但 serve 支持
+  // --baseDir 子路径挂载（模拟生产的多 domain URL 结构）。带 baseDir 时
+  // 若清空 basePath，页面内相对链接（./xxx）会随访问入口不同解析到根路径，
+  // 造成链接丢失前缀。修正：仅在不带 baseDir 的纯 serve 模式下清空。
   const basePath =
-    componentData.ctx.argv.serve || !cfg.baseUrl
+    (componentData.ctx.argv.serve && !componentData.ctx.argv.baseDir) || !cfg.baseUrl
       ? ""
       : new URL(`https://${cfg.baseUrl}`).pathname.replace(/\/$/, "")
   const doc = (
