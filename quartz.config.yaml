@@ -162,9 +162,9 @@ plugins:
   - source: github:quartz-community/darkmode
     enabled: true
     layout:
-      position: left
-      priority: 30
-      group: toolbar
+      # 移出左侧工具栏，加入右上角按钮排（位置由 styles/custom.scss 里的 .darkmode 覆盖为 fixed）
+      position: header
+      priority: 5
   - source: github:quartz-community/reader-mode
     enabled: false
     layout:
@@ -202,11 +202,18 @@ plugins:
   - source: github:quartz-community/note-properties
     enabled: true
     options:
-      includeAll: false
+      # 显示全部 frontmatter 字段：生成数据的维度字段是 type / status / priority / 组织(项目/任务) 等，
+      # 而 includeAll:false 时只会显示 includedProperties 里列的三项（description/tags/aliases），
+      # 数据里没有这三项 → 属性块渲染为空白（表现为"frontmatter 没渲染出来"）。
+      includeAll: true
+      # 仅在 includeAll 切回 false 时生效；这里保留一份维度字段清单备用
       includedProperties:
         - description
         - tags
         - aliases
+        - type
+        - status
+        - priority
       excludedProperties: []
       hidePropertiesView: false
       delimiters: ---
@@ -295,22 +302,33 @@ plugins:
         precomputeLocal: true
         localDepth: 1
       localGraph:
+        # 局部图谱：把当前页邻居按目录一级聚合成带数字徽标的节点，点击可展开
+        aggregation:
+          - type: folder
+            depth: 1
         drag: true
         zoom: true
         depth: 1
         scale: 1.1
-        repelForce: 0.5
+        # 以下数值对齐 v4 Graph.tsx 的 [TUNING]（间距调大，避免节点/长标题重叠与"边太短"）
+        repelForce: 0.6
         centerForce: 0.3
-        linkDistance: 30
-        fontSize: 0.6
+        linkDistance: 70
+        fontSize: 0.75
         opacityScale: 1
         showTags: true
         removeTags: []
         focusOnHover: false
         enableRadial: false
-      # 本次先不带大区设置（regionRules 留空 → 走"普通收起模式"）；配置迁移完成后再加上
       globalGraph:
         enabled: true
+        # 大区模式：按「项目类型」（frontmatter 的 type 字段）给核心节点分大区，首屏只显示大区节点
+        # 项目类型取值：产品研发 / 基础设施建设 / 市场推广 / 运营支撑 / 技术预研（缺失 type 的归入 "(未分组)"）
+        regionRules:
+          - type: field
+            field: type
+        # 展开大区后核心节点保持收起（需再点具体节点才展开其邻域）
+        expandCoresOnRegionOpen: false
         aggregation:
           - type: folder
             depth: 1
@@ -325,6 +343,9 @@ plugins:
             values:
               - 项目
         coreNodeLimit: 50
+        # 核心节点中心数字：关联数 ≥7 才显示，>120 显示为 120+
+        countLabelMin: 7
+        countLabelMaxDisplay: 120
         startCollapsed: true
         filterOrphans: true
         filterNonCoreNodes: true
@@ -332,10 +353,11 @@ plugins:
         zoom: true
         depth: -1
         scale: 0.9
-        repelForce: 0.5
-        centerForce: 0.2
-        linkDistance: 30
-        fontSize: 0.6
+        # 以下数值对齐 v4 Graph.tsx 的 [TUNING]（全局图谱节点更分散，长标题不易重叠）
+        repelForce: 1.5
+        centerForce: 0.4
+        linkDistance: 150
+        fontSize: 0.72
         opacityScale: 1
         showTags: true
         removeTags: []

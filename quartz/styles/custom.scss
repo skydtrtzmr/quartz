@@ -1,3 +1,42 @@
 @use "./variables.scss" as *;
 
 // put your custom CSS here!
+
+// ===== 右上角工具按钮排：夜间模式 | 全局图谱 | 阅读模式 =====
+// 三个按钮分别由 darkmode（社区插件）、graph-pro（脚本注入 .graph-toggle）、
+// reader-mode-pro（.readermode）输出。这里把夜间模式按钮也改成"视口右上角固定定位"，
+// 与另外两个并排；尺寸（32×32）、圆角、悬停底色与它们保持一致。
+// 位置：阅读模式 right:1rem（自带）→ 全局图谱 right:3.25rem（graph-pro）→ 夜间模式 right:5.5rem（本文件）。
+// 注：custom.scss 在 @layer quartz-base 之外（componentResources.ts:347），
+//     这里再用 :root 提升一级特异性，压过插件自带的 .darkmode 规则。
+:root .darkmode {
+  position: fixed;
+  top: 0.75rem;
+  right: 5.5rem;
+  z-index: 200;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: var(--lightgray);
+  }
+
+  // 原插件样式是 absolute 且未设 left（依赖原工具栏布局），脱离后改为静态由 flex 居中；
+  // 日/夜图标的 display 切换规则（:root[saved-theme=...]）保持不动。
+  & > svg {
+    position: static;
+    width: 20px;
+    height: 20px;
+    fill: var(--darkgray);
+  }
+}
