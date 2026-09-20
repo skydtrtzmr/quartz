@@ -6,8 +6,6 @@ configuration:
   enablePopovers: true
   analytics: null
   locale: zh-CN
-  # 注意：baseUrl 决定 body[data-basepath]，必须与 Go server 的服务路径（domain 目录名）一致
-  # 当前对齐 demo-region（settings/demo-region/quartz.config.json 里也是 localhost/demo-region）
   baseUrl: localhost/demo-region
   defaultDateType: modified
   ignorePatterns:
@@ -64,6 +62,10 @@ plugins:
     options:
       enableInHtmlEmbed: false
       enableCheckbox: true
+      # 关闭 mermaid：其脚本从 cdnjs.cloudflare.com 懒加载（obsidian-flavored-markdown
+      # 的 src/scripts/mermaid.inline.ts:195），站点要求零外链；当前内容也没有 mermaid 图。
+      # 将来需要时按铁律 fork 该插件，参考 v4 的 client/quartz/static/mermaid/（ESM 入口 + chunks 分片）
+      mermaid: false
     order: 30
   - source: github:quartz-community/github-flavored-markdown
     enabled: true
@@ -92,7 +94,6 @@ plugins:
     enabled: true
   - source: github:quartz-community/alias-redirects
     enabled: true
-  # 社区版 content-index 已由本地 content-index-pro 替代（补回每页 frontmatter 字段）
   - source: github:quartz-community/content-index
     enabled: false
     options:
@@ -115,16 +116,16 @@ plugins:
   - source: github:quartz-community/bases-page
     enabled: false
   - source: github:quartz-community/explorer
-    enabled: true
+    enabled: false
     layout:
       position: left
       priority: 50
+  # 社区版 graph 已由本地 graph-pro 替代（d3/pixi 随插件本地打包，站点零外链）
   - source: github:quartz-community/graph
-    enabled: true
+    enabled: false
     layout:
       position: right
       priority: 10
-  # 社区版 search 已由本地 search-pro 替代（结果统计条 + 加载更多分页）
   - source: github:quartz-community/search
     enabled: false
     layout:
@@ -241,7 +242,6 @@ plugins:
       links: {}
       copyright: 源悦科技
     order: 50
-  # 本地 content-index-pro：contentIndex.json 保留每页 frontmatter（供字段检索）
   - source: ../plugins-local/content-index-pro
     enabled: true
     options:
@@ -252,7 +252,6 @@ plugins:
       rssSlug: index
       includeEmptyFiles: true
     order: 50
-  # 本地 search-pro：社区版搜索能力 + 结果统计条 + 加载更多分页
   - source: ../plugins-local/search-pro
     enabled: true
     options:
@@ -270,6 +269,82 @@ plugins:
       group: toolbar
       groupOptions:
         grow: true
+  - source: ../plugins-local/explorer-pro
+    enabled: true
+    options:
+      folderDefaultState: collapsed
+      folderClickBehavior: link
+      useSavedState: true
+      virtualScrollWindowSize: 50
+      hideFiles: false
+      sort:
+        type: natural
+        order: asc
+        field: title
+    order: 50
+    layout:
+      position: left
+      priority: 50
+  # 本地 graph-pro（fork quartz-community/graph）：构建期预计算 + 提供图谱 UI（局部/全局）
+  # 键名对齐 v4 settings/<domain>/quartz.{config,layout}.json 的 graph 段，将来 per-domain 注入无需改插件
+  # d3@7 / pixi.js@8 已随插件打包（不再走 jsdelivr CDN，见 src/components/scripts/graph.inline.ts）
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options:
+      graph:
+        precomputeLocal: true
+        localDepth: 1
+      localGraph:
+        drag: true
+        zoom: true
+        depth: 1
+        scale: 1.1
+        repelForce: 0.5
+        centerForce: 0.3
+        linkDistance: 30
+        fontSize: 0.6
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: false
+        enableRadial: false
+      # 本次先不带大区设置（regionRules 留空 → 走"普通收起模式"）；配置迁移完成后再加上
+      globalGraph:
+        enabled: true
+        aggregation:
+          - type: folder
+            depth: 1
+          - type: field
+            field: type
+          - type: date
+            field: date
+            granularity: year
+        coreNodeFilter:
+          - type: folder
+            depth: 1
+            values:
+              - 项目
+        coreNodeLimit: 50
+        startCollapsed: true
+        filterOrphans: true
+        filterNonCoreNodes: true
+        drag: true
+        zoom: true
+        depth: -1
+        scale: 0.9
+        repelForce: 0.5
+        centerForce: 0.2
+        linkDistance: 30
+        fontSize: 0.6
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: true
+        enableRadial: true
+    order: 55
+    layout:
+      position: right
+      priority: 10
 layout:
   groups:
     toolbar:

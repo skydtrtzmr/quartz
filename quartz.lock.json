@@ -7,11 +7,23 @@
       "commit": "local",
       "installedAt": "2026-09-19T12:05:21.203Z"
     },
+    "explorer-pro": {
+      "source": "../plugins-local/explorer-pro",
+      "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\explorer-pro",
+      "commit": "local",
+      "installedAt": "2026-09-19T13:32:36.247Z"
+    },
     "footer-pro": {
       "source": "../plugins-local/footer-pro",
       "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\footer-pro",
       "commit": "local",
       "installedAt": "2026-09-19T10:01:28.971Z"
+    },
+    "graph-pro": {
+      "source": "../plugins-local/graph-pro",
+      "resolved": "E:\\ProgramProjects\\VScode_projects\\quartz-fullstack\\plugins-local\\graph-pro",
+      "commit": "local",
+      "installedAt": "2026-09-19T14:38:37.046Z"
     },
     "reader-mode-pro": {
       "source": "../plugins-local/reader-mode-pro",
