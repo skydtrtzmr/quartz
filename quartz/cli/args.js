@@ -82,6 +82,12 @@ export const BuildArgv = {
     default: "public",
     describe: "output folder for files",
   },
+  settings: {
+    string: true,
+    alias: ["s"],
+    describe:
+      "path to a settings config to use instead of quartz.config.yaml (a yaml file, or a directory containing quartz.config.yaml)",
+  },
   serve: {
     boolean: true,
     default: false,

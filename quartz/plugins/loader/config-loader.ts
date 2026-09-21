@@ -37,23 +37,105 @@ const DEFAULT_CONFIG_YAML_PATH = path.join(process.cwd(), "quartz.config.default
 const LEGACY_PLUGINS_JSON_PATH = path.join(process.cwd(), "quartz.plugins.json")
 const LEGACY_DEFAULT_PLUGINS_JSON_PATH = path.join(process.cwd(), "quartz.plugins.default.json")
 
-function resolveConfigPath(): string {
+/**
+ * 解析 `--settings <path>`（同时兼容 `--settings=<path>`）。
+ *
+ * 为什么直接读 process.argv：配置是在**导入期**加载的（`quartz.ts` 里 `loadQuartzConfig()` 在模块顶层被调用），
+ * 早于 CLI 参数解析完成，所以拿不到 yargs 的解析结果。v4 的 `quartz.layout.ts:41-59` 也是同样的做法。
+ *
+ * 语义（与 v4 的 `--settings` 同名同义）：
+ * - 传目录 → 取该目录下的 `quartz.config.yaml`（兼容 `.yml`）
+ * - 传文件 → 直接用该文件
+ * - 路径不存在/不合法 → 返回 undefined 并告警，由调用方回退默认配置（不中断构建）
+ */
+function resolveSettingsPath(): string | undefined {
+  const idx = process.argv.findIndex((a) => a === "--settings" || a.startsWith("--settings="))
+  if (idx === -1) return undefined
+
+  const arg = process.argv[idx]
+  const value = arg.startsWith("--settings=")
+    ? arg.slice("--settings=".length)
+    : process.argv[idx + 1]
+
+  if (!value || value.startsWith("-")) {
+    console.warn(
+      styleText("yellow", `[settings] --settings 缺少有效路径，回退默认配置（${CONFIG_YAML_PATH}）`),
+    )
+    return undefined
+  }
+
+  const resolved = path.resolve(value)
+  if (!fs.existsSync(resolved)) {
+    console.warn(
+      styleText("yellow", `[settings] --settings 指向的路径不存在：${resolved}，回退默认配置`),
+    )
+    return undefined
+  }
+  return resolved
+}
+
+function resolveDefaultConfigPath(): string {
   if (fs.existsSync(CONFIG_YAML_PATH)) return CONFIG_YAML_PATH
   if (fs.existsSync(LEGACY_PLUGINS_JSON_PATH)) return LEGACY_PLUGINS_JSON_PATH
   if (fs.existsSync(DEFAULT_CONFIG_YAML_PATH)) return DEFAULT_CONFIG_YAML_PATH
   if (fs.existsSync(LEGACY_DEFAULT_PLUGINS_JSON_PATH)) return LEGACY_DEFAULT_PLUGINS_JSON_PATH
   return CONFIG_YAML_PATH
 }
-function readPluginsJson(): QuartzPluginsJson | null {
-  const configPath = resolveConfigPath()
-  if (!fs.existsSync(configPath)) {
-    return null
+
+function resolveConfigPath(): string {
+  const settingsPath = resolveSettingsPath()
+  if (settingsPath) {
+    const isDir = fs.statSync(settingsPath).isDirectory()
+    const candidates = isDir
+      ? [path.join(settingsPath, "quartz.config.yaml"), path.join(settingsPath, "quartz.config.yml")]
+      : [settingsPath]
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        console.log(styleText("cyan", `[settings] 使用配置：${candidate}`))
+        return candidate
+      }
+    }
+    console.warn(
+      styleText(
+        "yellow",
+        `[settings] 目录下未找到 quartz.config.yaml：${settingsPath}，回退默认配置`,
+      ),
+    )
   }
+
+  return resolveDefaultConfigPath()
+}
+
+function parseConfigFile(configPath: string): QuartzPluginsJson {
   const raw = fs.readFileSync(configPath, "utf-8")
   if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
     return YAML.parse(raw) as QuartzPluginsJson
   }
   return JSON.parse(raw) as QuartzPluginsJson
+}
+
+function readPluginsJson(): QuartzPluginsJson | null {
+  const configPath = resolveConfigPath()
+  if (!fs.existsSync(configPath)) {
+    return null
+  }
+  try {
+    return parseConfigFile(configPath)
+  } catch (e) {
+    // 仅当配置来自 --settings 时容错：告警 + 回退默认配置（v4 同款"不因域配置坏掉而中断构建"的容错思路）；
+    // 默认主配置本身损坏仍然直接抛错，避免静默用了非预期配置。
+    const fallbackPath = resolveSettingsPath() ? resolveDefaultConfigPath() : undefined
+    if (!fallbackPath || fallbackPath === configPath || !fs.existsSync(fallbackPath)) {
+      throw e
+    }
+    console.warn(
+      styleText(
+        "yellow",
+        `[settings] ${configPath} 解析失败（${(e as Error)?.message ?? e}），回退默认配置：${fallbackPath}`,
+      ),
+    )
+    return parseConfigFile(fallbackPath)
+  }
 }
 
 function extractPluginName(source: PluginSource): string {
