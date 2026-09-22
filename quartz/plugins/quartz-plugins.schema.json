@@ -5,6 +5,67 @@
   "type": "object",
   "required": ["configuration", "plugins"],
   "additionalProperties": false,
+  "$defs": {
+    "folderAggregationRule": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "folder" },
+        "depth": { "type": "integer", "minimum": 1, "default": 1 }
+      }
+    },
+    "aggregationRule": {
+      "oneOf": [
+        { "$ref": "#/$defs/folderAggregationRule" },
+        {
+          "type": "object",
+          "required": ["type", "field"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "field" },
+            "field": { "type": "string", "pattern": "\\S" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "field", "granularity"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "date" },
+            "field": { "type": "string", "pattern": "\\S" },
+            "granularity": { "enum": ["year", "month", "quarter"] }
+          }
+        }
+      ]
+    },
+    "aggregationRuleChain": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/aggregationRule" }
+    },
+    "aggregation": {
+      "type": "object",
+      "required": ["root"],
+      "additionalProperties": false,
+      "description": "Shared aggregation input, compiled by aggregation-pro into static/aggregation.json.",
+      "properties": {
+        "minGroupSize": { "type": "integer", "minimum": 2, "default": 2 },
+        "root": { "$ref": "#/$defs/folderAggregationRule" },
+        "branches": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default": { "$ref": "#/$defs/aggregationRuleChain" },
+            "folders": {
+              "type": "object",
+              "description": "Content-relative directory paths. Missing keys inherit from ancestors, then default; [] explicitly stops inheritance and further grouping.",
+              "additionalProperties": { "$ref": "#/$defs/aggregationRuleChain" }
+            }
+          }
+        }
+      }
+    }
+  },
   "properties": {
     "$schema": {
       "type": "string",
@@ -171,6 +232,7 @@
           ],
           "description": "Analytics configuration (null to disable)"
         },
+        "aggregation": { "$ref": "#/$defs/aggregation" },
         "ignorePatterns": {
           "type": "array",
           "items": {

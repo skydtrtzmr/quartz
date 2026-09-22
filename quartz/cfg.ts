@@ -56,6 +56,33 @@ export type Analytics =
       host?: string
     }
 
+/** Site aggregation input. The aggregation plugin validates and compiles this
+ * into static/aggregation.json; consumers use that artifact, not the raw input.
+ */
+export interface FolderAggregationRule {
+  type: "folder"
+  /** Positive integer, counted from the content root. Defaults to 1. */
+  depth?: number
+}
+
+export type AggregationRule =
+  | FolderAggregationRule
+  | { type: "field"; field: string }
+  | { type: "date"; field: string; granularity: "year" | "month" | "quarter" }
+
+export interface AggregationConfiguration {
+  /** Minimum members per group, integer >= 2. Defaults to 2. */
+  minGroupSize?: number
+  root: FolderAggregationRule
+  branches?: {
+    default?: AggregationRule[]
+    /** Directory paths relative to the content root. Missing keys inherit from
+     * ancestors, then default; an explicit [] stops inheritance and grouping.
+     */
+    folders?: Record<string, AggregationRule[]>
+  }
+}
+
 export interface GlobalConfiguration {
   pageTitle: string
   pageTitleSuffix?: string
@@ -71,6 +98,8 @@ export interface GlobalConfiguration {
    *   Quartz will avoid using this as much as possible and use relative URLs most of the time
    */
   baseUrl?: string
+  /** Optional shared aggregation configuration; legacy graph options remain valid when absent. */
+  aggregation?: AggregationConfiguration
   theme: Theme
   /**
    * Allow to translate the date in the language of your choice.
