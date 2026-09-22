@@ -170,6 +170,8 @@ export async function parseMarkdown(ctx: BuildCtx, fps: FilePath[]): Promise<Pro
       minWorkers: "max",
       maxWorkers: concurrency,
       workerType: "thread",
+      // 配置在 worker 导入期加载，必须携带 --settings 等 CLI 参数。
+      workerThreadOpts: { argv: process.argv.slice(2) },
     })
     const serializableCtx: WorkerSerializableBuildCtx = {
       buildId: ctx.buildId,

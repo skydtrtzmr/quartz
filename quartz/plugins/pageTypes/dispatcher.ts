@@ -266,6 +266,9 @@ export const PageTypeDispatcher: QuartzEmitterPlugin<Partial<DispatcherOptions>>
           changedSlugs.add(changeEvent.file.data.slug!)
         }
       }
+      for (const slug of ctx.affectedSlugs ?? []) {
+        changedSlugs.add(slug)
+      }
 
       // Phase 1: Generate all virtual pages first so their data is available in allFiles
       const virtualEntries: Array<{

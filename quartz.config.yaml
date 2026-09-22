@@ -76,10 +76,23 @@ plugins:
   - source: github:quartz-community/table-of-contents
     enabled: true
     order: 60
+  # 社区版 crawl-links 已由本地 crawl-links-pro 替代（正文附件链接自动挂 download + data-router-ignore）
   - source: github:quartz-community/crawl-links
+    enabled: false
+    options:
+      markdownLinkResolution: shortest
+    order: 70
+  - source: ../plugins-local/crawl-links-pro
     enabled: true
     options:
       markdownLinkResolution: shortest
+      # 新增能力（默认即开启，显式写出便于调整）
+      downloadAttachments: true
+      attachmentExtensions: []
+      downloadNameFrom: alias
+      # 附件（资源文件）不计入页面出链 → 不再被当成"被引用但不存在的页面"，
+      # 因此不会生成虚拟节点占位页，也不会出现在图谱 / 目录树 / 搜索里
+      excludeAttachmentsFromLinks: true
     order: 70
   - source: github:quartz-community/description
     enabled: true
@@ -115,6 +128,10 @@ plugins:
     enabled: true
   - source: github:quartz-community/bases-page
     enabled: false
+  # 本地虚拟节点占位页（v4 `VirtualNodePage` 迁移）：pageType 插件，
+  # 用 generate() 为「被引用但不存在」的页面造占位页；布局键见文件末尾 layout.byPageType
+  - source: ../plugins-local/virtual-node-pro
+    enabled: true
   - source: github:quartz-community/explorer
     enabled: false
     layout:
@@ -199,8 +216,10 @@ plugins:
       position: left
       priority: 25
       display: mobile-only
+  # 社区版 note-properties 已由本地 note-properties-pro 替代
+  # （frontmatter 值支持 HTML 锚点渲染 + 附件链接自动挂 download）
   - source: github:quartz-community/note-properties
-    enabled: true
+    enabled: false
     options:
       # 显示全部 frontmatter 字段：生成数据的维度字段是 type / status / priority / 组织(项目/任务) 等，
       # 而 includeAll:false 时只会显示 includedProperties 里列的三项（description/tags/aliases），
@@ -218,6 +237,31 @@ plugins:
       hidePropertiesView: false
       delimiters: ---
       language: yaml
+    order: 5
+    layout:
+      position: beforeBody
+      priority: 15
+      display: all
+  - source: ../plugins-local/note-properties-pro
+    enabled: true
+    options:
+      includeAll: true
+      includedProperties:
+        - description
+        - tags
+        - aliases
+        - type
+        - status
+        - priority
+      excludedProperties: []
+      hidePropertiesView: false
+      delimiters: ---
+      language: yaml
+      # 新增能力（默认值即开启，显式写出便于调整）
+      htmlInProperties: true
+      downloadAttachments: true
+      attachmentExtensions: []
+      downloadNameFrom: alias
     order: 5
     layout:
       position: beforeBody
@@ -396,3 +440,8 @@ layout:
         right: []
     canvas: {}
     bases: {}
+    # 虚拟节点占位页：对齐 v4 的 virtualNodePageLayout ——
+    # 右栏保留（局部图谱 + Backlinks + TOC），只排掉阅读模式按钮
+    virtual-node:
+      exclude:
+        - reader-mode-pro

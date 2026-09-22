@@ -88,6 +88,20 @@ export const BuildArgv = {
     describe:
       "path to a settings config to use instead of quartz.config.yaml (a yaml file, or a directory containing quartz.config.yaml)",
   },
+  sqlite: {
+    boolean: true,
+    default: false,
+    describe: "enable SQLite-based persistent incremental build",
+  },
+  reset: {
+    boolean: true,
+    default: false,
+    describe: "reset the SQLite cache and output directory before building",
+  },
+  cacheDir: {
+    string: true,
+    describe: "directory used to store the SQLite incremental build cache",
+  },
   serve: {
     boolean: true,
     default: false,
