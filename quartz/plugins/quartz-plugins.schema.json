@@ -26,16 +26,6 @@
             "type": { "const": "field" },
             "field": { "type": "string", "pattern": "\\S" }
           }
-        },
-        {
-          "type": "object",
-          "required": ["type", "field", "granularity"],
-          "additionalProperties": false,
-          "properties": {
-            "type": { "const": "date" },
-            "field": { "type": "string", "pattern": "\\S" },
-            "granularity": { "enum": ["year", "month", "quarter"] }
-          }
         }
       ]
     },

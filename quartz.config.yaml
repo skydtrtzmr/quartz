@@ -132,6 +132,15 @@ plugins:
   # 用 generate() 为「被引用但不存在」的页面造占位页；布局键见文件末尾 layout.byPageType
   - source: ../plugins-local/virtual-node-pro
     enabled: true
+  # 维度聚合页（pageType + emitter + 文件夹页入口组件）：
+  # 构建期按 configuration.aggregation 造 _dimensions/** 虚拟页，图谱渲染复用 graph-pro。
+  # 组件只能用导出名引用（AggregationNav）；插件名别名只在「恰好一个组件」时才登记。
+  - source: ../plugins-local/aggregation-page-pro
+    enabled: true
+    order: 56
+    layout:
+      position: beforeBody
+      priority: 20
   - source: github:quartz-community/explorer
     enabled: false
     layout:
@@ -378,9 +387,6 @@ plugins:
             depth: 1
           - type: field
             field: type
-          - type: date
-            field: date
-            granularity: year
         coreNodeFilter:
           - type: folder
             depth: 1
@@ -440,6 +446,13 @@ layout:
         right: []
     canvas: {}
     bases: {}
+    # 维度聚合页：图谱在正文区（由插件自己的容器承载），不要右栏图谱与 Backlinks
+    aggregation-page:
+      exclude:
+        - reader-mode-pro
+        - graph
+        - backlinks
+        - aggregation-page-pro
     # 虚拟节点占位页：对齐 v4 的 virtualNodePageLayout ——
     # 右栏保留（局部图谱 + Backlinks + TOC），只排掉阅读模式按钮
     virtual-node:
