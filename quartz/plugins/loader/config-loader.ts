@@ -830,10 +830,39 @@ export function buildLayoutForEntries(
     const layout = entry.layout
     const name = extractPluginName(entry.source)
 
+    // 显式指定组件（`layout.component`）时优先按 `pluginName/exportName` → 裸 `exportName` 解析，
+    // 让多组件插件能把不同组件放到不同位置（同一 source 可写多条条目）
+    const explicit = layout.component
+      ? (componentRegistry.get(`${name}/${layout.component}`) ??
+        componentRegistry.get(layout.component))
+      : undefined
+    if (layout.component && !explicit) {
+      console.warn(
+        styleText("yellow", `⚠`) +
+          ` Plugin "${name}" 声明了 layout.component="${layout.component}"，但组件注册表里没有这个组件，跳过该布局条目。`,
+      )
+      continue
+    }
+
     // Look up component from registry
-    const registered =
+    let registered =
+      explicit ??
       componentRegistry.get(name) ??
       componentRegistry.get(`${formatSourceDisplay(entry.source)}/${name}`)
+
+    // 多组件插件没有「插件名」别名（别名只在恰好一个组件时登记），此时退化为
+    // 「manifest.defaultPosition 与条目 position 一致的那个组件」，让只写 position/priority
+    // 的老配置在多组件插件上依然落到预期组件（显式 layout.component 优先，不受影响）。
+    if (!registered) {
+      const candidates = [...componentRegistry.getAll().entries()].filter(
+        ([key, reg]) =>
+          key.startsWith(`${name}/`) && reg.manifest?.defaultPosition === layout.position,
+      )
+      if (candidates.length === 1) {
+        registered = candidates[0][1]
+      }
+    }
+
     if (!registered) {
       // Try common naming patterns
       const pascalName = name

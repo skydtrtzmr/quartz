@@ -49,6 +49,10 @@ plugins:
         - frontmatter
         - filesystem
     order: 10
+  - source: ../plugins-local/echarts-pro
+    enabled: true
+    options: { height: 360, styleMode: original }
+    order: 15
   - source: github:quartz-community/syntax-highlighting
     enabled: true
     options:
@@ -132,15 +136,24 @@ plugins:
   # 用 generate() 为「被引用但不存在」的页面造占位页；布局键见文件末尾 layout.byPageType
   - source: ../plugins-local/virtual-node-pro
     enabled: true
-  # 维度聚合页（pageType + emitter + 文件夹页入口组件）：
+  # 维度聚合页（pageType + emitter + 组件）：
   # 构建期按 configuration.aggregation 造 _dimensions/** 虚拟页，图谱渲染复用 graph-pro。
-  # 组件只能用导出名引用（AggregationNav）；插件名别名只在「恰好一个组件」时才登记。
+  # 多组件插件：每个组件各写一条条目，并用 layout.component 指定导出名（核心补丁 #8）
   - source: ../plugins-local/aggregation-page-pro
     enabled: true
     order: 56
     layout:
       position: beforeBody
       priority: 20
+      component: AggregationNav
+  # 右上角「本目录聚合配置」按钮（主配置未配 aggregation，组件自身不渲染）
+  - source: ../plugins-local/aggregation-page-pro
+    enabled: true
+    order: 56
+    layout:
+      position: header
+      priority: 40
+      component: AggregationConfigToggle
   - source: github:quartz-community/explorer
     enabled: false
     layout:
@@ -337,6 +350,12 @@ plugins:
       useSavedState: true
       virtualScrollWindowSize: 50
       hideFiles: false
+      # 维度页是系统页：左侧目录树里屏蔽 `_dimensions`（入口由「动态分类子节点」与文件夹页维度入口提供）
+      excludePathPrefixes: [_dimensions]
+      # 动态分类：目录下挂「维度 → 取值」子节点（主配置未配 configuration.aggregation，暂不生效）
+      dimensionFolders: true
+      dimensionMaxValues: 20
+      dimensionMaxLevels: 2
       sort:
         type: natural
         order: asc
@@ -350,7 +369,7 @@ plugins:
   # d3@7 / pixi.js@8 已随插件打包（不再走 jsdelivr CDN，见 src/components/scripts/graph.inline.ts）
   - source: ../plugins-local/graph-pro
     enabled: true
-    options:
+    options: &graph-pro-options
       graph:
         precomputeLocal: true
         localDepth: 1
@@ -417,6 +436,19 @@ plugins:
     layout:
       position: right
       priority: 10
+      # 多组件插件必须显式指定组件：Graph = 侧栏局部图谱
+      component: Graph
+  # 全局图谱宿主（GlobalGraphOverlay）：只渲染 `.global-graph-outer` 覆盖层，放到 header。
+  # header 与阅读模式/深色模式按钮同级，**任何页面类型都不会被清空** →
+  # 文件夹页/维度页即使清空了右栏，右上角仍能打开全局图谱。
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: *graph-pro-options
+    order: 56
+    layout:
+      position: header
+      priority: 30
+      component: GlobalGraphOverlay
 layout:
   groups:
     toolbar:
@@ -446,15 +478,14 @@ layout:
         right: []
     canvas: {}
     bases: {}
-    # 维度聚合页：图谱在正文区（由插件自己的容器承载），不要右栏图谱与 Backlinks
+    # 维度聚合页：图谱在正文区（由插件自己的容器承载），所以只清空右栏。
+    # ⚠️ 不要用 exclude 去 graph-pro：那会连 header 里的全局图谱宿主一起移除。
+    # 注意 exclude 匹配的是插件来源名：本地图谱 fork 是 graph-pro（不是 graph）
     aggregation-page:
       exclude:
-        - reader-mode-pro
-        - graph
-        - backlinks
         - aggregation-page-pro
-    # 虚拟节点占位页：对齐 v4 的 virtualNodePageLayout ——
-    # 右栏保留（局部图谱 + Backlinks + TOC），只排掉阅读模式按钮
-    virtual-node:
-      exclude:
-        - reader-mode-pro
+        - backlinks
+      positions: { right: [] }
+    # 虚拟节点占位页：与内容页一致（右栏图谱/Backlinks/TOC 保留，header 按钮一律保留）。
+    # 不再排掉阅读模式按钮（旧配置是 `exclude: [reader-mode-pro]`）
+    virtual-node: {}

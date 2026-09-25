@@ -293,12 +293,16 @@
             "properties": {
               "position": {
                 "type": "string",
-                "enum": ["left", "right", "beforeBody", "afterBody", "body"],
+                "enum": ["left", "right", "beforeBody", "afterBody", "header", "footer"],
                 "description": "Layout position"
               },
               "priority": {
                 "type": "number",
                 "description": "Layout priority"
+              },
+              "component": {
+                "type": "string",
+                "description": "Component export name to place (required for multi-component plugins; one entry per component/position)"
               },
               "display": {
                 "type": "string",

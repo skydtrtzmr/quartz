@@ -128,6 +128,14 @@ export type PluginSpecifier =
 export interface PluginLayoutDeclaration {
   position: LayoutPosition
   priority: number
+  /**
+   * 指定用插件里的哪个组件（**导出名**）占位。
+   *
+   * 默认按「插件名」解析组件，只有恰好一个组件的插件会把插件名登记为组件别名；
+   * 多组件插件解析不到 → 该条目被静默跳过。需要为多组件插件分别定位时显式声明本字段，
+   * 同一 source 可写多条条目，把它的不同组件放到不同位置（如侧栏 Graph + header 的全局图谱宿主）。
+   */
+  component?: string
   display?: LayoutDisplay
   condition?: string
   group?: string
