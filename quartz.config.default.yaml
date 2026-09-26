@@ -135,11 +135,67 @@ plugins:
     layout:
       position: left
       priority: 50
-  - source: "@quartz-community/graph"
+  # 本地 graph-pro（fork quartz-community/graph）：构建期预计算 + 图谱 UI（局部/全局）。
+  # d3@7 / pixi.js@8 已随插件打包（不再走 jsdelivr CDN）。
+  # 首屏与分组（2026-09-26 简化）：邻居分组复用 configuration.aggregation，首屏大区恒为文件夹，
+  # 核心节点 = folders 白名单命中者；regionRules / aggregation / coreNodeFilter 已删除（由图内解析层合成）。
+  - source: ../plugins-local/graph-pro
     enabled: true
+    options: &graph-pro-options
+      graph:
+        precomputeLocal: true
+        localDepth: 1
+      localGraph:
+        # 邻居分组统一复用 configuration.aggregation；不再写 localGraph.aggregation
+        drag: true
+        zoom: true
+        depth: 1
+        scale: 1.1
+        repelForce: 0.6
+        centerForce: 0.3
+        linkDistance: 70
+        fontSize: 0.75
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: false
+        enableRadial: false
+      globalGraph:
+        enabled: true
+        folders: [项目]
+        expandCoresOnRegionOpen: false
+        coreNodeLimit: 50
+        countLabelMin: 7
+        countLabelMaxDisplay: 120
+        startCollapsed: true
+        filterOrphans: true
+        filterNonCoreNodes: true
+        drag: true
+        zoom: true
+        depth: -1
+        scale: 0.9
+        repelForce: 1.5
+        centerForce: 0.4
+        linkDistance: 150
+        fontSize: 0.72
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: true
+        enableRadial: true
+    order: 55
     layout:
       position: right
       priority: 10
+      component: Graph
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: *graph-pro-options
+    order: 56
+    layout:
+      position: header
+      priority: 30
+      component: GlobalGraphOverlay
   - source: "@quartz-community/search"
     enabled: true
     layout:
@@ -222,18 +278,33 @@ plugins:
     enabled: true
     options: {}
     order: 50
-  - source: "@quartz-community/note-properties"
+  # 本地 note-properties-pro（fork quartz-community/note-properties）：frontmatter 值支持 HTML 锚点渲染
+  # + 附件链接自动挂 download。属性显示链（2026-09-26，与 configuration.aggregation 同构）：
+  # 链 = 有序白名单，按目录决定面板显示哪些字段；链外字段仍可参与聚合维度（即「只聚合、不显示」）。
+  - source: ../plugins-local/note-properties-pro
     enabled: true
     options:
       includeAll: false
-      includedProperties:
-        - description
-        - tags
-        - aliases
-      excludedProperties: []
+      includedProperties: [description, tags, aliases]
+      # 全局兜底：title 不在面板显示（避免与页面标题重复）
+      excludedProperties: [title]
+      properties:
+        folderDepth: 1
+        branches:
+          default: [date, type, status, priority, category, tags]
+          folders:
+            项目: [阶段, type, status, 负责人, tags]
+            任务: [status, 阶段, 级别, 负责人, tags]
+            人员: [category, type, 级别, 组织, tags]
+            组织: [type, 阶段, tags]
+            问答: [category, status, tags]
       hidePropertiesView: false
       delimiters: ---
       language: yaml
+      htmlInProperties: true
+      downloadAttachments: true
+      attachmentExtensions: []
+      downloadNameFrom: alias
     order: 5
     layout:
       position: beforeBody
