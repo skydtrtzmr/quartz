@@ -41,6 +41,9 @@ configuration:
         highlight: rgba(56, 189, 248, 0.15)
         textHighlight: "#fef3c788"
 plugins:
+  - source: ../plugins-local/aggregation-pro
+    enabled: true
+    order: 45
   - source: github:quartz-community/created-modified-date
     enabled: true
     options:
