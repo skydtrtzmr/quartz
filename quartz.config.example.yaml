@@ -1,0 +1,377 @@
+# Dedicated Quartz v5 configuration for the SQLite demo-region build.
+configuration:
+  pageTitle: demo-region-sqlite
+  pageTitleSuffix: ""
+  enableSPA: true
+  enablePopovers: true
+  analytics: null
+  locale: zh-CN
+  baseUrl: localhost/demo-region-sqlite
+  # Shared rules consumed by local and global graph aggregation.
+  aggregation:
+    # 演示用 1：每个取值都成组 → 每个维度值都能作为聚合节点被双击跳转。
+    # 若回调到 2，则只有同目录里凑够 2 个同值成员才会出现字段级聚合节点
+    # （小邻域里往往一个都不达标，导致「只能跳到文件夹」）。
+    minGroupSize: 1
+    # 目录上下文层数：文件夹恒为第一层，这里只设层数（不再写 root: { type: folder, depth }）
+    folderDepth: 1
+    branches:
+      # default 里带 status：让「进行中/已完成/已取消」等取值同时出现在 任务 与 项目 下，
+      # 从而能演示维度值页的「跨目录 scope 切换 + 按目录分组列表」
+      default: [type, status, category]
+      folders:
+        # 项目先看阶段（立项/计划/执行/…），再看类型——项目页里最常用的轴
+        # 负责人是 wikilink（[[person-xxxxx]]）：firstValue 会剥离为纯文本再聚合，
+        # 默认不在前 2 级（maxLevels=2），需要在面板里拖到前 2 位才生效
+        项目: [阶段, type, status, 负责人]
+        任务: [status, 阶段, 级别]
+        人员: [category, type, 级别]
+        组织: [type, 阶段]
+  defaultDateType: modified
+  ignorePatterns:
+    - private
+    - templates
+    - .obsidian
+  theme:
+    fontOrigin: local
+    cdnCaching: false
+    typography:
+      header: Schibsted Grotesk
+      body: Source Sans Pro
+      code: IBM Plex Mono
+    colors:
+      lightMode:
+        light: "#ffffff"
+        lightgray: "#dce3ec"
+        gray: "#64748b"
+        darkgray: "#334155"
+        dark: "#0f172a"
+        secondary: "#0369a1"
+        tertiary: "#0891b2"
+        highlight: rgba(3, 105, 161, 0.1)
+        textHighlight: "#fef3c7aa"
+      darkMode:
+        light: "#0b1220"
+        lightgray: "#243244"
+        gray: "#7c8ba1"
+        darkgray: "#cbd5e1"
+        dark: "#f1f5f9"
+        secondary: "#38bdf8"
+        tertiary: "#22d3ee"
+        highlight: rgba(56, 189, 248, 0.15)
+        textHighlight: "#fef3c788"
+plugins:
+  - source: ../plugins-local/aggregation-pro
+    enabled: true
+    order: 45
+  - source: github:quartz-community/created-modified-date
+    enabled: true
+    options:
+      defaultDateType: modified
+      priority: [frontmatter, filesystem]
+    order: 10
+  - source: ../plugins-local/echarts-pro
+    enabled: true
+    options: { height: 360, styleMode: quartz }
+    order: 15
+  - source: github:quartz-community/syntax-highlighting
+    enabled: true
+    options:
+      theme: { light: github-light, dark: github-dark }
+      keepBackground: false
+    order: 20
+  - source: github:quartz-community/obsidian-flavored-markdown
+    enabled: true
+    options:
+      enableInHtmlEmbed: false
+      enableCheckbox: true
+      mermaid: false
+    order: 30
+  - source: github:quartz-community/github-flavored-markdown
+    enabled: true
+    order: 40
+  - source: github:quartz-community/hard-line-breaks
+    enabled: true
+    order: 50
+  - source: github:quartz-community/table-of-contents
+    enabled: true
+    order: 60
+  - source: github:quartz-community/crawl-links
+    enabled: false
+  # 使用本地版本：正文附件链接支持 download 和 data-router-ignore。
+  - source: ../plugins-local/crawl-links-pro
+    enabled: true
+    options:
+      markdownLinkResolution: shortest
+      downloadAttachments: true
+      attachmentExtensions: []
+      downloadNameFrom: alias
+    order: 70
+  - source: github:quartz-community/description
+    enabled: true
+    order: 80
+  - source: github:quartz-community/latex
+    enabled: false
+    order: 90
+  - source: github:quartz-community/citations
+    enabled: false
+    order: 95
+  - source: github:quartz-community/remove-draft
+    enabled: true
+  - source: github:quartz-community/alias-redirects
+    enabled: true
+  - source: github:quartz-community/content-index
+    enabled: false
+  - source: github:quartz-community/favicon
+    enabled: false
+  - source: github:quartz-community/og-image
+    enabled: false
+  - source: github:quartz-community/cname
+    enabled: false
+  - source: github:quartz-community/canvas-page
+    enabled: false
+  - source: github:quartz-community/content-page
+    enabled: true
+  - source: github:quartz-community/folder-page
+    enabled: true
+  - source: github:quartz-community/tag-page
+    enabled: true
+  - source: github:quartz-community/bases-page
+    enabled: false
+  - source: ../plugins-local/virtual-node-pro
+    enabled: true
+  # 维度聚合页（pageType + emitter + 组件）
+  # 多组件插件：每个组件各写一条条目，并用 layout.component 指定导出名（核心补丁 #8）
+  - source: ../plugins-local/aggregation-page-pro
+    enabled: true
+    order: 56
+    layout: { position: beforeBody, priority: 20, component: AggregationNav }
+  # 右上角「本目录聚合配置」按钮：与阅读模式/全局图谱/夜间模式同排；配置只对当前目录生效
+  - source: ../plugins-local/aggregation-page-pro
+    enabled: true
+    order: 56
+    layout: { position: header, priority: 40, component: AggregationConfigToggle }
+  - source: github:quartz-community/explorer
+    enabled: false
+  - source: github:quartz-community/graph
+    enabled: false
+  - source: github:quartz-community/search
+    enabled: false
+  - source: github:quartz-community/backlinks
+    enabled: true
+    layout: { position: right, priority: 30 }
+  - source: github:quartz-community/article-title
+    enabled: true
+    layout: { position: beforeBody, priority: 10 }
+  - source: github:quartz-community/content-meta
+    enabled: false
+  # 「日期 + 阅读时长」全部页面都不需要 → 直接禁用本插件（覆盖 content / folder / tag / 维度页等所有页型）
+  - source: ../plugins-local/content-meta-pro
+    enabled: false
+    layout: { position: beforeBody, priority: 20 }
+  - source: github:quartz-community/tag-list
+    enabled: true
+    layout: { position: beforeBody, priority: 30 }
+  - source: github:quartz-community/page-title
+    enabled: true
+    layout: { position: left, priority: 10 }
+  - source: github:quartz-community/darkmode
+    enabled: true
+    layout: { position: header, priority: 5 }
+  - source: github:quartz-community/reader-mode
+    enabled: false
+  - source: github:quartz-community/breadcrumbs
+    enabled: true
+    layout: { position: beforeBody, priority: 5, condition: not-index }
+  - source: github:quartz-community/comments
+    enabled: false
+  - source: github:quartz-community/footer
+    enabled: false
+  - source: github:quartz-community/recent-notes
+    enabled: false
+  - source: github:quartz-community/spacer
+    enabled: true
+    options: {}
+    order: 25
+    layout: { position: left, priority: 25, display: mobile-only }
+  - source: github:quartz-community/note-properties
+    enabled: false
+  # 沿用主配置的 frontmatter HTML 渲染及附件下载能力。
+  - source: ../plugins-local/note-properties-pro
+    enabled: true
+    options:
+      # 与 configuration.aggregation 同构的「属性显示链」：链 = 有序白名单。
+      # 链外字段（如 负责人）仍能作为聚合维度，只是不在正文属性面板显示 ——
+      # 这就是「只用来聚合、但隐藏」的表达方式。
+      # ⚠️ 配了 properties 后不能再配 includeAll: true（互斥，会直接抛错）。
+      includeAll: false
+      includedProperties: [description, tags, aliases, type, status, priority]
+      excludedProperties: [title]
+      properties:
+        folderDepth: 1
+        branches:
+          default: [date, type, status, priority, category, tags]
+          folders:
+            项目: [阶段, type, status, 负责人, tags]
+            任务: [status, 阶段, 级别, 负责人, tags]
+            人员: [category, type, 级别, 组织, tags]
+            组织: [type, 阶段, tags]
+            问答: [category, status, tags]
+      hidePropertiesView: false
+      delimiters: ---
+      language: yaml
+      htmlInProperties: true
+      downloadAttachments: true
+      attachmentExtensions: []
+      downloadNameFrom: alias
+    order: 5
+    layout: { position: beforeBody, priority: 15, display: all }
+  - source: github:quartz-community/encrypted-pages
+    enabled: false
+  - source: github:quartz-community/stacked-pages
+    enabled: false
+  - source: ../plugins-local/reader-mode-pro
+    enabled: true
+    options: {}
+    order: 50
+    layout: { position: header, priority: 10 }
+  - source: ../plugins-local/footer-pro
+    enabled: true
+    options: { links: {}, copyright: 源悦科技 }
+    order: 50
+  - source: ../plugins-local/content-index-pro
+    enabled: true
+    options:
+      enableSiteMap: true
+      enableRSS: true
+      rssLimit: 10
+      rssFullHtml: false
+      rssSlug: index
+      includeEmptyFiles: true
+    order: 50
+  - source: ../plugins-local/search-pro
+    enabled: true
+    options:
+      enablePreview: true
+      fieldPriority: [title, content, tags]
+      initialDisplayCount: 10
+      loadMoreCount: 10
+    order: 50
+    layout:
+      position: left
+      priority: 20
+      group: toolbar
+      groupOptions: { grow: true }
+  - source: ../plugins-local/explorer-pro
+    enabled: true
+    options:
+      folderDefaultState: collapsed
+      folderClickBehavior: link
+      useSavedState: true
+      virtualScrollWindowSize: 50
+      hideFiles: false
+      # 维度页是系统页：左侧目录树里屏蔽 `_dimensions`（入口改由「动态分类子节点」与文件夹页维度入口提供）
+      excludePathPrefixes: [_dimensions]
+      # 动态分类：在目录下挂「维度 → 取值」子节点（数据取自 static/aggregation.json + graph/dimensions/index.json）
+      dimensionFolders: true
+      dimensionMaxValues: 20
+      # 最多应用几级维度（右上角配置面板里拖动排序后，只取前 N 项生效）
+      dimensionMaxLevels: 2
+      sort: { type: natural, order: asc, field: title }
+    order: 50
+    layout: { position: left, priority: 50 }
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: &graph-pro-options
+      graph: { precomputeLocal: true, localDepth: 1 }
+      localGraph:
+        showAggregatedNodeLinks: false
+        drag: true
+        zoom: true
+        depth: 1
+        scale: 1.1
+        repelForce: 0.6
+        centerForce: 0.3
+        linkDistance: 70
+        fontSize: 0.75
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: false
+        enableRadial: false
+      folderGraph:
+        linkDistance: 125
+      globalGraph:
+        showAggregatedNodeLinks: true
+        enabled: true
+        # 主体文件夹白名单：首屏大区 = 这些文件夹；空 / 缺省 = 全部文件夹。
+        # 邻居的字段分组复用 configuration.aggregation（本域已配），这里只管「主体」。
+        folders: [项目, 组织]
+        expandCoresOnRegionOpen: false
+        coreNodeLimit: 50
+        # 全局核心集合仅取共享字段链前两项，文件夹分区不占层数。
+        coreAggregationMaxLevels: 2
+        countLabelMin: 7
+        countLabelMaxDisplay: 120
+        startCollapsed: true
+        filterOrphans: true
+        filterNonCoreNodes: true
+        drag: true
+        zoom: true
+        depth: -1
+        scale: 0.9
+        repelForce: 1.5
+        centerForce: 0.4
+        linkDistance: 135
+        fontSize: 0.72
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: true
+        enableRadial: true
+    order: 55
+    layout: { position: right, priority: 10, component: Graph }
+  # 全局图谱宿主（GlobalGraphOverlay）：只渲染 `.global-graph-outer` 覆盖层，放到 header。
+  # header 与阅读模式/深色模式按钮同级，**任何页面类型都不会被清空** →
+  # 文件夹页/维度页虽然清空了右栏（没有侧栏局部图谱），右上角仍能打开全局图谱。
+  # 多组件插件的每个组件必须各写一条条目并用 layout.component 指定导出名。
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: *graph-pro-options
+    order: 56
+    layout: { position: header, priority: 30, component: GlobalGraphOverlay }
+  # 文件夹页正文图谱（FolderGraph）：只在文件夹页渲染，显示该文件夹内文件 + 关联节点；
+  # 挂 beforeBody → 出现在**正文**里（与聚合值页的正文图谱观感一致），右栏不再放图谱。
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: *graph-pro-options
+    order: 57
+    layout: { position: beforeBody, priority: 25, component: FolderGraph }
+layout:
+  groups:
+    toolbar: { priority: 35, direction: row, gap: 0.5rem }
+  byPageType:
+    "404": { positions: { beforeBody: [], left: [], right: [] } }
+    content: {}
+    folder:
+      # 图谱改到**正文**（FolderGraph，见上面 graph-pro 的 beforeBody 条目）→ 清空右栏，不再放侧栏图谱。
+      # 只排除侧栏 Backlinks（「日期/阅读时长」已在上面全局禁用 content-meta-pro，所有页型都不显示）。
+      exclude: [backlinks]
+      positions: { right: [] }
+    tag:
+      exclude: [reader-mode, graph, backlinks]
+      positions: { right: [] }
+    canvas: {}
+    bases: {}
+    # 维度聚合页：图谱在正文区（插件自己的容器承载），所以清空右栏（去掉侧栏局部图谱/Backlinks）。
+    # ⚠️ 不要用 exclude 去 graph-pro：那会连 header 里的全局图谱宿主一起移除，
+    #    导致本页右上角打不开全局图谱。header 的按钮（阅读模式/深色模式/全局图谱）一律保留。
+    aggregation-page:
+      # 只排除 backlinks（维度页不需要侧栏 Backlinks）。
+      # ⚠️ 不要 exclude aggregation-page-pro：那会连 header 里的「本目录聚合配置」按钮一起移除。
+      # AggregationNav 本身在维度页会 return null（只渲染目录页），无需排除。
+      exclude: [backlinks]
+      positions: { right: [] }
+    # 虚拟节点占位页：与内容页一致（右栏图谱/Backlinks/TOC 保留，header 按钮一律保留）。
+    # 不再排掉阅读模式按钮（旧配置 `exclude: [reader-mode-pro]` 是本轮之前的决定）。
+    virtual-node: {}
