@@ -397,10 +397,6 @@ plugins:
       dimensionFolders: true
       dimensionMaxValues: 20
       dimensionMaxLevels: 2
-      sort:
-        type: natural
-        order: asc
-        field: title
     order: 50
     layout:
       position: left
@@ -417,6 +413,8 @@ plugins:
       localGraph:
         # 局部图谱：邻居的目录/字段分组统一复用 configuration.aggregation（shared 模式）；
         # 不再写 aggregation（旧写法 localGraph.aggregation: [{type: folder, depth: 1}] 已移除，改由图内解析层合成）。
+        # 展开聚合节点后是否保留「子节点 ↔ 原中心」的真实连线：局部图谱 false（只留聚合结构，画面更干净）
+        showAggregatedNodeLinks: false
         drag: true
         zoom: true
         depth: 1
@@ -431,17 +429,27 @@ plugins:
         removeTags: []
         focusOnHover: false
         enableRadial: false
+      # 文件夹页正文图谱（FolderGraph 组件，见下方第三条 graph-pro 条目）的力参数覆盖：
+      # 只覆盖 linkDistance，其余沿用 globalGraph（FolderGraph.tsx: linkDistance = folderGraph.linkDistance ?? globalGraph.linkDistance）。
+      # 125 比全局的 150 略紧，适配正文较窄的宽度，长标题不易互相压叠。
+      folderGraph:
+        linkDistance: 125
       globalGraph:
+        # 展开聚合节点后是否保留「子节点 ↔ 原中心」的真实连线；false 避免与聚合连线同时出现
+        showAggregatedNodeLinks: false
         enabled: true
         # —— 首屏与分组（2026-09-26 简化）——
         # 已删除：regionRules / globalGraph.aggregation / coreNodeFilter / localGraph.aggregation。
         # 邻居分组统一复用 configuration.aggregation（有则按目录各自的字段链，无则兜底「仅按文件夹」）；
         # 首屏大区恒为「文件夹」，核心节点 = 主体文件夹白名单命中者。三者由图内解析层合成，运行期零改动。
         # folders：主体文件夹白名单 → 首屏大区 = 这些文件夹；空 / 缺省 = 全部文件夹。
-        folders: [项目]
+        # 项目 + 组织 = 首屏两个大区（各自的核心节点 = 该文件夹白名单命中者）。
+        folders: [项目, 组织]
         # 展开大区后核心节点保持收起（需再点具体节点才展开其邻域）
         expandCoresOnRegionOpen: false
         coreNodeLimit: 50
+        # 全局核心集合只取共享字段链的前 N 项（文件夹分区不占层数；插件默认即 2，显式写出便于调整）
+        coreAggregationMaxLevels: 2
         # 核心节点中心数字：关联数 ≥7 才显示，>120 显示为 120+
         countLabelMin: 7
         countLabelMaxDisplay: 120

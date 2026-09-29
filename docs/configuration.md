@@ -28,6 +28,7 @@ This part of the configuration concerns anything that can affect the whole site.
 - `enableSPA`: whether to enable [[SPA Routing]] on your site.
 - `enablePopovers`: whether to enable [[popover previews]] on your site.
 - `transcludeDefaultExpanded`: whether whole-page `![[Page]]` embeds start expanded. Defaults to `true`; set it to `false` to show only their titles until opened.
+- `listingSort`: a shared frontmatter field for folder pages and Explorer. `default: title` sorts by title; `folders: { notes: priority }` sorts the direct children of `notes` by their `priority` field. Child folders inherit the nearest ancestor's field unless they set their own. Entries without that field follow entries with it, and folders appear before files. The Go API `PUT /api/domain/{domain}/_folder/{folder}` accepts `{ "sort": { "field": "priority" } }` and stores the override in this domain's YAML; `{ "sort": null }` restores inheritance.
 - `analytics`: what to use for analytics on your site. Values can be
   - `null`: don't use analytics;
   - `{ provider: 'google', tagId: '<your-google-tag>' }`: use Google Analytics;
