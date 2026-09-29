@@ -31,6 +31,7 @@ import Flex from "../../components/Flex"
 import MobileOnly from "../../components/MobileOnly"
 import DesktopOnly from "../../components/DesktopOnly"
 import ConditionalRender from "../../components/ConditionalRender"
+import { createFolderPageSort, normalizeListingSort } from "../../util/listingSort"
 
 const CONFIG_YAML_PATH = path.join(process.cwd(), "quartz.config.yaml")
 const DEFAULT_CONFIG_YAML_PATH = path.join(process.cwd(), "quartz.config.default.yaml")
@@ -108,10 +109,18 @@ function resolveConfigPath(): string {
 
 function parseConfigFile(configPath: string): QuartzPluginsJson {
   const raw = fs.readFileSync(configPath, "utf-8")
-  if (configPath.endsWith(".yaml") || configPath.endsWith(".yml")) {
-    return YAML.parse(raw) as QuartzPluginsJson
+  const config = (configPath.endsWith(".yaml") || configPath.endsWith(".yml")
+    ? YAML.parse(raw) : JSON.parse(raw)) as QuartzPluginsJson
+  const listingSort = normalizeListingSort(config.configuration?.listingSort)
+  for (const plugin of config.plugins ?? []) {
+    const name = extractPluginName(plugin.source)
+    if (name === "explorer-pro") {
+      plugin.options = { ...plugin.options, sortFields: listingSort }
+    } else if (name === "folder-page") {
+      plugin.options = { ...plugin.options, sort: createFolderPageSort(listingSort) }
+    }
   }
-  return JSON.parse(raw) as QuartzPluginsJson
+  return config
 }
 
 function readPluginsJson(): QuartzPluginsJson | null {

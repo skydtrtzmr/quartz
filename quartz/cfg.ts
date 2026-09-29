@@ -87,6 +87,8 @@ export interface GlobalConfiguration {
   enableSPA: boolean
   /** Whether to display Wikipedia-style popovers when hovering over links */
   enablePopovers: boolean
+  /** Whether whole-page transclusions start expanded. Defaults to true. */
+  transcludeDefaultExpanded?: boolean
   /** Analytics mode */
   analytics: Analytics
   /** Glob patterns to not search */
@@ -97,6 +99,8 @@ export interface GlobalConfiguration {
   baseUrl?: string
   /** Optional shared aggregation configuration; legacy graph options remain valid when absent. */
   aggregation?: AggregationConfiguration
+  /** Shared frontmatter sort field for folder pages and the explorer. */
+  listingSort?: { default?: string; folders?: Record<string, string> }
   theme: Theme
   /**
    * Allow to translate the date in the language of your choice.

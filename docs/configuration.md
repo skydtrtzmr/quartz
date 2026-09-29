@@ -27,6 +27,7 @@ This part of the configuration concerns anything that can affect the whole site.
 - `pageTitleSuffix`: a string added to the end of the page title. This only applies to the browser tab title, not the title shown at the top of the page.
 - `enableSPA`: whether to enable [[SPA Routing]] on your site.
 - `enablePopovers`: whether to enable [[popover previews]] on your site.
+- `transcludeDefaultExpanded`: whether whole-page `![[Page]]` embeds start expanded. Defaults to `true`; set it to `false` to show only their titles until opened.
 - `analytics`: what to use for analytics on your site. Values can be
   - `null`: don't use analytics;
   - `{ provider: 'google', tagId: '<your-google-tag>' }`: use Google Analytics;

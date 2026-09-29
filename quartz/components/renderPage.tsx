@@ -258,7 +258,10 @@ export function renderTranscludes(
           {
             type: "element",
             tagName: "details",
-            properties: { open: true, className: ["transclude-page"] },
+            properties: {
+              className: ["transclude-page"],
+              ...(cfg.transcludeDefaultExpanded === false ? {} : { open: true }),
+            },
             children: [
               {
                 type: "element",

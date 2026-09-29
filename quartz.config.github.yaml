@@ -19,10 +19,31 @@ configuration:
   pageTitleSuffix: ""
   enableSPA: true
   enablePopovers: true
+  transcludeDefaultExpanded: true # 整页 ![[页面]] 默认展开；改为 false 则默认收起
   analytics: null
   locale: zh-CN
   baseUrl: localhost/demo-region
+  # —— 共享聚合规则（与 note-properties-pro 的 properties 链同构）——
+  # 链 = 有序字段名（顺序即分组顺序）。删掉本段后：图谱/反向链接/目录树退化为「仅按文件夹」分组，
+  # 右上角聚合面板按钮与 _dimensions/** 维度页都不再生成。
+  # minGroupSize：同目录里某取值至少凑够 N 个成员才成组。2 = 默认（避免单成员节点）；
+  #   改成 1 = 每个取值都成组（演示用，保证每个维度值都有聚合节点可跳转）。
+  # folderDepth：目录上下文层数（文件夹恒为第一层）。
+  # ⚠️ 配套要求：plugins 里必须启用 aggregation-pro（产出 static/aggregation.json）。
+  aggregation:
+    minGroupSize: 2
+    folderDepth: 1
+    branches:
+      default: [type, status, category]
+      folders:
+        项目: [阶段, type, status, 负责人]
+        任务: [status, 阶段, 级别]
+        人员: [category, type, 级别]
+        组织: [type, 阶段]
   defaultDateType: modified
+  listingSort:
+    default: title
+    folders: {}
   ignorePatterns:
     - private
     - templates
@@ -56,6 +77,14 @@ configuration:
         highlight: rgba(56, 189, 248, 0.15)
         textHighlight: "#fef3c788"
 plugins:
+  # 共享聚合规则 → static/aggregation.json（图谱 / 反向链接 / 目录树 / 维度页共用同一份规则）。
+  # 未配 configuration.aggregation 时该 emitter 无产物，下游自动退化为「仅按文件夹」分组，不报错。
+  - source:
+      repo: github:skydtrtzmr/quartz-community_aggregation-pro
+      ref: dev
+      name: aggregation-pro
+    enabled: true
+    order: 45
   - source: github:quartz-community/created-modified-date
     enabled: true
     options:
@@ -173,7 +202,7 @@ plugins:
       position: beforeBody
       priority: 20
       component: AggregationNav
-  # 右上角「本目录聚合配置」按钮（主配置未配 aggregation，组件自身不渲染）
+  # 右上角「本目录聚合配置」按钮（当前目录规则链为空时构建期不渲染）
   - source:
       repo: github:skydtrtzmr/quartz-community_aggregation-page
       ref: dev
@@ -204,6 +233,17 @@ plugins:
       groupOptions:
         grow: true
   - source: github:quartz-community/backlinks
+    enabled: false
+    layout:
+      position: right
+      priority: 30
+  # 本地 backlinks-pro（fork quartz-community/backlinks）：v4 反向链接优化移植 ——
+  # 运行时分组（数据源 graph-pro 局部图谱 JSON，回退 contentIndex.json），
+  # 分组规则运行时读 static/aggregation.json（与 graph/explorer 同语义），未配 aggregation 退化为平铺
+  - source:
+      repo: github:skydtrtzmr/quartz-community_backlinks
+      ref: dev
+      name: backlinks-pro
     enabled: true
     layout:
       position: right
@@ -409,7 +449,7 @@ plugins:
       hideFiles: false
       # 维度页是系统页：左侧目录树里屏蔽 `_dimensions`（入口由「动态分类子节点」与文件夹页维度入口提供）
       excludePathPrefixes: [_dimensions]
-      # 动态分类：目录下挂「维度 → 取值」子节点（主配置未配 configuration.aggregation，暂不生效）
+      # 动态分类：目录下挂「维度 → 取值」子节点（依赖 configuration.aggregation；未配该目录链的目录不挂）
       dimensionFolders: true
       dimensionMaxValues: 20
       dimensionMaxLevels: 2

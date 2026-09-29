@@ -82,6 +82,19 @@
           "type": "boolean",
           "description": "Enable hover popovers for links"
         },
+        "transcludeDefaultExpanded": {
+          "type": "boolean",
+          "description": "Whether whole-page transclusions start expanded (default: true)"
+        },
+        "listingSort": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Frontmatter field used to order folder listings and explorer children; folder paths inherit from ancestors.",
+          "properties": {
+            "default": { "type": "string", "pattern": "\\S" },
+            "folders": { "type": "object", "additionalProperties": { "type": "string", "pattern": "\\S" } }
+          }
+        },
         "locale": {
           "type": "string",
           "description": "Locale code for the site"

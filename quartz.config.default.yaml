@@ -4,6 +4,7 @@ configuration:
   pageTitleSuffix: ""
   enableSPA: true
   enablePopovers: true
+  transcludeDefaultExpanded: true # Set false to collapse whole-page ![[...]] embeds by default
   analytics:
     provider: plausible
   locale: en-US
