@@ -75,7 +75,7 @@ plugins:
     order: 10
   - source: ../plugins-local/echarts-pro
     enabled: true
-    options: { height: 360, styleMode: original }
+    options: { height: 360, styleMode: quartz }
     order: 15
   - source: github:quartz-community/syntax-highlighting
     enabled: true
@@ -310,7 +310,7 @@ plugins:
       properties:
         folderDepth: 1
         branches:
-          default: [date, type, status, priority, category, tags]
+          default: []
           folders:
             项目: [阶段, type, status, 负责人, tags]
             任务: [status, 阶段, 级别, 负责人, tags]
