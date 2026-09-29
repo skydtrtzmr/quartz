@@ -77,6 +77,13 @@ describe("renderTranscludes", () => {
     )
 
     const bq = root.children[0] as Element
+    const details = bq.children[0] as Element
+    assert.equal(details.tagName, "details")
+    assert.equal(details.properties.open, true, "page transclusion should start expanded")
+    const summary = details.children[0] as Element
+    assert.equal(summary.tagName, "summary")
+    assert.equal(summary.children[0].type, "text")
+    assert.equal((summary.children[0] as { value: string }).value, "target")
     const texts = JSON.stringify(bq.children)
     assert.ok(texts.includes("Target content"), "transcluded content should be inlined")
   })
@@ -111,6 +118,8 @@ describe("renderTranscludes", () => {
 
     const first = root.children[0] as Element
     const second = root.children[1] as Element
+    assert.equal((first.children[0] as Element).tagName, "details")
+    assert.equal((second.children[0] as Element).tagName, "details")
     const firstText = JSON.stringify(first.children)
     const secondText = JSON.stringify(second.children)
     assert.ok(firstText.includes("Duplicated content"), "first embed should resolve")
@@ -172,6 +181,8 @@ describe("renderTranscludes", () => {
 
     const first = root.children[0] as Element
     const second = root.children[1] as Element
+    assert.notEqual((first.children[0] as Element).tagName, "details")
+    assert.notEqual((second.children[0] as Element).tagName, "details")
     const firstText = JSON.stringify(first.children)
     const secondText = JSON.stringify(second.children)
     assert.ok(firstText.includes("Intro text"), "first header section should resolve")

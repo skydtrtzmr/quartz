@@ -656,6 +656,52 @@ ol.overflow {
   ul {
     padding-left: 1rem;
   }
+
+  .transclude-page > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    list-style: none;
+    cursor: pointer;
+    color: var(--dark);
+    font-family: var(--headerFont);
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.4;
+    background: var(--lightgray);
+    border: 1px solid var(--secondary);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    margin: 0.75rem 0;
+    transition: background-color 0.15s ease;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &::before {
+      content: "";
+      width: 0.45rem;
+      height: 0.45rem;
+      flex: 0 0 auto;
+      border-right: 2px solid var(--secondary);
+      border-bottom: 2px solid var(--secondary);
+      transform: rotate(-45deg);
+    }
+
+    &:hover {
+      background: var(--highlight);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--secondary);
+      outline-offset: 2px;
+    }
+  }
+
+  .transclude-page[open] > summary::before {
+    transform: rotate(45deg);
+  }
 }
 
 .katex-display {

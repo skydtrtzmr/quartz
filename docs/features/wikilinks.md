@@ -21,6 +21,6 @@ Wikilink matching is case-insensitive to mirror Obsidian: `[[My Note]]`, `[[my n
 
 - `![[Path to image]]`: embeds an image into the page
 - `![[Path to image|100x145]]`: embeds an image into the page with dimensions 100px by 145px
-- `![[Path to file]]`: transclude an entire page
+- `![[Path to file]]`: transclude an entire page. Select its title to collapse or expand the content.
 - `![[Path to file#Anchor]]`: transclude everything under the header `Anchor`
 - `![[Path to file#^b15695]]`: transclude block with ID `^b15695`

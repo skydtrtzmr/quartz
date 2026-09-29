@@ -257,31 +257,38 @@ export function renderTranscludes(
         el.children = [
           {
             type: "element",
-            tagName: "h1",
-            properties: {},
+            tagName: "details",
+            properties: { open: true, className: ["transclude-page"] },
             children: [
               {
-                type: "text",
-                value:
-                  page.frontmatter?.title ??
-                  i18n(cfg.locale).components.transcludes.transcludeOf({
-                    targetSlug: page.slug!,
-                  }),
+                type: "element",
+                tagName: "summary",
+                properties: {},
+                children: [
+                  {
+                    type: "text",
+                    value:
+                      page.frontmatter?.title ??
+                      i18n(cfg.locale).components.transcludes.transcludeOf({
+                        targetSlug: page.slug!,
+                      }),
+                  },
+                ],
               },
-            ],
-          },
-          ...(page.htmlAst.children as ElementContent[]).map((c) =>
-            normalizeHastElement(c as Element, slug, transcludeTarget),
-          ),
-          {
-            type: "element",
-            tagName: "a",
-            properties: {
-              href: inner.properties?.href,
-              class: ["internal", "internal-link", "transclude-src"],
-            },
-            children: [
-              { type: "text", value: i18n(cfg.locale).components.transcludes.linkToOriginal },
+              ...(page.htmlAst.children as ElementContent[]).map((c) =>
+                normalizeHastElement(c as Element, slug, transcludeTarget),
+              ),
+              {
+                type: "element",
+                tagName: "a",
+                properties: {
+                  href: inner.properties?.href,
+                  class: ["internal", "internal-link", "transclude-src"],
+                },
+                children: [
+                  { type: "text", value: i18n(cfg.locale).components.transcludes.linkToOriginal },
+                ],
+              },
             ],
           },
         ]
