@@ -100,7 +100,10 @@ export interface GlobalConfiguration {
   /** Optional shared aggregation configuration; legacy graph options remain valid when absent. */
   aggregation?: AggregationConfiguration
   /** Shared frontmatter sort field for folder pages and the explorer. */
-  listingSort?: { default?: string; folders?: Record<string, string> }
+  listingSort?: {
+    default?: string | { field: string; order?: "asc" | "desc" }
+    folders?: Record<string, string | { field: string; order?: "asc" | "desc" }>
+  }
   theme: Theme
   /**
    * Allow to translate the date in the language of your choice.

@@ -6,6 +6,20 @@
   "required": ["configuration", "plugins"],
   "additionalProperties": false,
   "$defs": {
+    "listingSortRule": {
+      "oneOf": [
+        { "type": "string", "pattern": "\\S" },
+        {
+          "type": "object",
+          "required": ["field"],
+          "additionalProperties": false,
+          "properties": {
+            "field": { "type": "string", "pattern": "\\S" },
+            "order": { "type": "string", "enum": ["asc", "desc"], "default": "asc" }
+          }
+        }
+      ]
+    },
     "folderAggregationRule": {
       "type": "object",
       "required": ["type"],
@@ -89,10 +103,13 @@
         "listingSort": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Frontmatter field used to order folder listings and explorer children; folder paths inherit from ancestors.",
+          "description": "Frontmatter field and optional direction used to order folder listings and explorer children; folder paths inherit from ancestors.",
           "properties": {
-            "default": { "type": "string", "pattern": "\\S" },
-            "folders": { "type": "object", "additionalProperties": { "type": "string", "pattern": "\\S" } }
+            "default": { "$ref": "#/$defs/listingSortRule" },
+            "folders": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/listingSortRule" }
+            }
           }
         },
         "locale": {
