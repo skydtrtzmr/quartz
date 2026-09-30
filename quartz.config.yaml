@@ -459,7 +459,6 @@ plugins:
         countLabelMin: 7
         countLabelMaxDisplay: 120
         startCollapsed: true
-        filterOrphans: true
         filterNonCoreNodes: true
         drag: true
         zoom: true
