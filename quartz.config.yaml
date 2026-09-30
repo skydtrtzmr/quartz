@@ -150,7 +150,12 @@ plugins:
     enabled: false
   - source: github:quartz-community/content-page
     enabled: true
+  # 社区版 folder-page 已由本地 folder-page-pro 替代（fork quartz-community/folder-page）：
+  # 文件列表按 configuration.listingSort（目录级 field + order，逐级向上继承）渲染，
+  # 比较器由 config-loader 按插件名注入 plugin.options.sort；pageType 仍为 folder。
   - source: github:quartz-community/folder-page
+    enabled: false
+  - source: ../plugins-local/folder-page-pro
     enabled: true
   - source: github:quartz-community/tag-page
     enabled: true

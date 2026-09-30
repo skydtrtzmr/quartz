@@ -116,7 +116,7 @@ function parseConfigFile(configPath: string): QuartzPluginsJson {
     const name = extractPluginName(plugin.source)
     if (name === "explorer-pro") {
       plugin.options = { ...plugin.options, sortFields: listingSort }
-    } else if (name === "folder-page") {
+    } else if (name === "folder-page" || name === "folder-page-pro") {
       plugin.options = { ...plugin.options, sort: createFolderPageSort(listingSort) }
     }
   }
