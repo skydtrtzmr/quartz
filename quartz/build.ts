@@ -25,6 +25,11 @@ import { ChangeEvent } from "./plugins/types"
 import { minimatch } from "minimatch"
 import { GraphDatabase } from "./util/graphdb"
 
+// 卡死定位：记录最后进入的 emitter，进程退出时兜底打印
+// （正常退出/抛错时可见；被 taskkill /F 强杀时不会触发，这一点没法绕过）
+let lastEmitterName = ""
+process.on("exit", (code) => console.log(`[exit] code=${code} lastEmitter=${lastEmitterName}`))
+
 function reportSlugCollisions(content: ProcessedContent[]): void {
   const collisions = detectSlugCollisions(content)
   if (collisions.length === 0) return
@@ -432,21 +437,38 @@ async function buildQuartzIncremental(argv: Argv, mut: Mutex, clientRefresh: () 
       forceFull = false,
     ) => {
       const emitFn = forceFull || coldBuild ? emitter.emit : (emitter.partialEmit ?? emitter.emit)
-      const emitted = await emitFn(ctx, content, staticResources, changeEvents)
-      if (emitted === null) return
+      const mode =
+        forceFull || coldBuild ? "emit" : emitter.partialEmit ? "partialEmit" : "emit(fallback)"
+      const t0 = Date.now()
+      const filesBefore = emittedFiles
+      lastEmitterName = emitter.name
+      console.log(`[emitter] -> ${emitter.name} (${mode}, content=${content.length})`)
+      try {
+        const emitted = await emitFn(ctx, content, staticResources, changeEvents)
+        if (emitted === null) {
+          console.log(`[emitter] <- ${emitter.name} 返回 null，${Date.now() - t0}ms`)
+          return
+        }
 
-      if (Symbol.asyncIterator in emitted) {
-        for await (const file of emitted) {
-          outputFiles.add(path.resolve(file))
-          emittedFiles++
-          if (ctx.argv.verbose) console.log(`[emit:${emitter.name}] ${file}`)
+        if (Symbol.asyncIterator in emitted) {
+          for await (const file of emitted) {
+            outputFiles.add(path.resolve(file))
+            emittedFiles++
+            if (ctx.argv.verbose) console.log(`[emit:${emitter.name}] ${file}`)
+          }
+        } else {
+          for (const file of emitted) outputFiles.add(path.resolve(file))
+          emittedFiles += emitted.length
+          if (ctx.argv.verbose) {
+            for (const file of emitted) console.log(`[emit:${emitter.name}] ${file}`)
+          }
         }
-      } else {
-        for (const file of emitted) outputFiles.add(path.resolve(file))
-        emittedFiles += emitted.length
-        if (ctx.argv.verbose) {
-          for (const file of emitted) console.log(`[emit:${emitter.name}] ${file}`)
-        }
+        console.log(
+          `[emitter] <- ${emitter.name} 完成，${Date.now() - t0}ms，产出 ${emittedFiles - filesBefore} 个文件`,
+        )
+      } catch (err) {
+        console.log(`[emitter] xx ${emitter.name} 异常，${Date.now() - t0}ms:`, err)
+        throw err
       }
     }
 
@@ -475,10 +497,14 @@ async function buildQuartzIncremental(argv: Argv, mut: Mutex, clientRefresh: () 
 
     const contentWithVirtual =
       ctx.virtualPages.length > 0 ? [...filteredContent, ...ctx.virtualPages] : filteredContent
+    console.log(
+      `[phase] 其余 emitter 开始（共 ${cfg.plugins.emitters.length} 个，virtual pages=${ctx.virtualPages.length}，content=${contentWithVirtual.length}）`,
+    )
     for (const emitter of cfg.plugins.emitters) {
       if (emitter.name === "ComponentResources" || emitter.name === "PageTypeDispatcher") continue
       await runEmitter(emitter, contentWithVirtual)
     }
+    console.log(`[phase] 其余 emitter 结束`)
 
     for (const deletedPath of deletedFilePaths) {
       try {
