@@ -535,7 +535,6 @@ layout:
     # 注意 exclude 匹配的是插件来源名：本地图谱 fork 是 graph-pro（不是 graph）
     aggregation-page:
       exclude:
-        - aggregation-page-pro
         - backlinks
       positions: { right: [] }
     # 虚拟节点占位页：与内容页一致（右栏图谱/Backlinks/TOC 保留，header 按钮一律保留）。
