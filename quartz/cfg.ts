@@ -1,6 +1,6 @@
-import { ValidDateType } from "./components/Date"
 import { QuartzComponent } from "./components/types"
 import { ValidLocale } from "./i18n"
+import { PluginSpecifier } from "./plugins/loader/types"
 import { PluginTypes } from "./plugins/types"
 import { Theme } from "./util/theme"
 
@@ -56,6 +56,30 @@ export type Analytics =
       host?: string
     }
 
+/** Site aggregation input. The aggregation plugin validates and compiles this
+ * into static/aggregation.json; consumers use that artifact, not the raw input.
+ */
+export interface FolderAggregationRule {
+  type: "folder"
+  /** Positive integer, counted from the content root. Defaults to 1. */
+  depth?: number
+}
+
+export type AggregationRule = FolderAggregationRule | { type: "field"; field: string }
+
+export interface AggregationConfiguration {
+  /** Minimum members per group, integer >= 2. Defaults to 2. */
+  minGroupSize?: number
+  root: FolderAggregationRule
+  branches?: {
+    default?: AggregationRule[]
+    /** Directory paths relative to the content root. Missing keys inherit from
+     * ancestors, then default; an explicit [] stops inheritance and grouping.
+     */
+    folders?: Record<string, AggregationRule[]>
+  }
+}
+
 export interface GlobalConfiguration {
   pageTitle: string
   pageTitleSuffix?: string
@@ -63,16 +87,23 @@ export interface GlobalConfiguration {
   enableSPA: boolean
   /** Whether to display Wikipedia-style popovers when hovering over links */
   enablePopovers: boolean
+  /** Whether whole-page transclusions start expanded. Defaults to true. */
+  transcludeDefaultExpanded?: boolean
   /** Analytics mode */
   analytics: Analytics
   /** Glob patterns to not search */
   ignorePatterns: string[]
-  /** Whether to use created, modified, or published as the default type of date */
-  defaultDateType: ValidDateType
   /** Base URL to use for CNAME files, sitemaps, and RSS feeds that require an absolute URL.
    *   Quartz will avoid using this as much as possible and use relative URLs most of the time
    */
   baseUrl?: string
+  /** Optional shared aggregation configuration; legacy graph options remain valid when absent. */
+  aggregation?: AggregationConfiguration
+  /** Shared frontmatter sort field for folder pages and the explorer. */
+  listingSort?: {
+    default?: string | { field: string; order?: "asc" | "desc" }
+    folders?: Record<string, string | { field: string; order?: "asc" | "desc" }>
+  }
   theme: Theme
   /**
    * Allow to translate the date in the language of your choice.
@@ -88,6 +119,7 @@ export interface GlobalConfiguration {
 export interface QuartzConfig {
   configuration: GlobalConfiguration
   plugins: PluginTypes
+  externalPlugins?: PluginSpecifier[]
 }
 
 export interface FullPageLayout {
@@ -98,7 +130,9 @@ export interface FullPageLayout {
   afterBody: QuartzComponent[]
   left: QuartzComponent[]
   right: QuartzComponent[]
-  footer: QuartzComponent
+  footer: QuartzComponent[]
+  /** Page frame name (e.g. "default", "full-width", "minimal"). Defaults to "default". */
+  frame?: string
 }
 
 export type PageLayout = Pick<FullPageLayout, "beforeBody" | "left" | "right">

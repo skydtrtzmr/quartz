@@ -1,0 +1,541 @@
+# yaml-language-server: $schema=./quartz/plugins/quartz-plugins.schema.json
+configuration:
+  pageTitle: 源悦知识库
+  pageTitleSuffix: ""
+  enableSPA: true
+  enablePopovers: true
+  transcludeDefaultExpanded: false # 整页 ![[页面]] 默认展开；改为 false 则默认收起
+  analytics: null
+  locale: zh-CN
+  baseUrl: localhost/demo-region
+  # —— 共享聚合规则（与 note-properties-pro 的 properties 链同构）——
+  # 链 = 有序字段名（顺序即分组顺序）。删掉本段后：图谱/反向链接/目录树退化为「仅按文件夹」分组，
+  # 右上角聚合面板按钮与 _dimensions/** 维度页都不再生成。
+  # minGroupSize：同目录里某取值至少凑够 N 个成员才成组。2 = 默认（避免单成员节点）；
+  #   改成 1 = 每个取值都成组（演示用，保证每个维度值都有聚合节点可跳转）。
+  # folderDepth：目录上下文层数（文件夹恒为第一层）。
+  # ⚠️ 配套要求：plugins 里必须启用 aggregation-pro（产出 static/aggregation.json）。
+  aggregation:
+    minGroupSize: 2
+    folderDepth: 1
+    branches:
+      default: [type, status, category]
+      folders:
+        项目: [阶段, type, status, 负责人]
+        任务: [status, 阶段, 级别]
+        人员: [category, type, 级别]
+        组织: [type, 阶段]
+  defaultDateType: modified
+  listingSort:
+    default: title
+    folders: {}
+  ignorePatterns:
+    - private
+    - templates
+    - .obsidian
+  theme:
+    fontOrigin: local
+    cdnCaching: false
+    typography:
+      header: Schibsted Grotesk
+      body: Source Sans Pro
+      code: IBM Plex Mono
+    colors:
+      lightMode:
+        light: "#ffffff"
+        lightgray: "#dce3ec"
+        gray: "#64748b"
+        darkgray: "#334155"
+        dark: "#0f172a"
+        secondary: "#0369a1"
+        tertiary: "#0891b2"
+        highlight: rgba(3, 105, 161, 0.1)
+        textHighlight: "#fef3c7aa"
+      darkMode:
+        light: "#0b1220"
+        lightgray: "#243244"
+        gray: "#7c8ba1"
+        darkgray: "#cbd5e1"
+        dark: "#f1f5f9"
+        secondary: "#38bdf8"
+        tertiary: "#22d3ee"
+        highlight: rgba(56, 189, 248, 0.15)
+        textHighlight: "#fef3c788"
+plugins:
+  - source: ../plugins-local/aggregation-pro
+    enabled: true
+    order: 45
+  - source: github:quartz-community/created-modified-date
+    enabled: true
+    options:
+      defaultDateType: modified
+      priority:
+        - frontmatter
+        - filesystem
+    order: 10
+  - source: ../plugins-local/echarts-pro
+    enabled: true
+    options: { height: 360, styleMode: quartz }
+    order: 15
+  - source: github:quartz-community/syntax-highlighting
+    enabled: true
+    options:
+      theme:
+        light: github-light
+        dark: github-dark
+      keepBackground: false
+    order: 20
+  - source: github:quartz-community/obsidian-flavored-markdown
+    enabled: true
+    options:
+      enableInHtmlEmbed: false
+      enableCheckbox: true
+      # 关闭 mermaid：其脚本从 cdnjs.cloudflare.com 懒加载（obsidian-flavored-markdown
+      # 的 src/scripts/mermaid.inline.ts:195），站点要求零外链；当前内容也没有 mermaid 图。
+      # 将来需要时按铁律 fork 该插件，参考 v4 的 client/quartz/static/mermaid/（ESM 入口 + chunks 分片）
+      mermaid: false
+    order: 30
+  - source: github:quartz-community/github-flavored-markdown
+    enabled: true
+    order: 40
+  - source: github:quartz-community/hard-line-breaks
+    enabled: true
+    order: 50
+  - source: github:quartz-community/table-of-contents
+    enabled: true
+    order: 60
+  # 社区版 crawl-links 已由本地 crawl-links-pro 替代（正文附件链接自动挂 download + data-router-ignore）
+  - source: github:quartz-community/crawl-links
+    enabled: false
+    options:
+      markdownLinkResolution: shortest
+    order: 70
+  - source: ../plugins-local/crawl-links-pro
+    enabled: true
+    options:
+      markdownLinkResolution: shortest
+      # 新增能力（默认即开启，显式写出便于调整）
+      downloadAttachments: true
+      attachmentExtensions: []
+      downloadNameFrom: alias
+      # 附件（资源文件）不计入页面出链 → 不再被当成"被引用但不存在的页面"，
+      # 因此不会生成虚拟节点占位页，也不会出现在图谱 / 目录树 / 搜索里
+      excludeAttachmentsFromLinks: true
+    order: 70
+  - source: github:quartz-community/description
+    enabled: true
+    order: 80
+  - source: github:quartz-community/latex
+    enabled: false
+    order: 90
+  - source: github:quartz-community/citations
+    enabled: false
+    order: 95
+  - source: github:quartz-community/remove-draft
+    enabled: true
+  - source: github:quartz-community/alias-redirects
+    enabled: true
+  - source: github:quartz-community/content-index
+    enabled: false
+    options:
+      enableSiteMap: true
+      enableRSS: true
+  - source: github:quartz-community/favicon
+    enabled: false
+  - source: github:quartz-community/og-image
+    enabled: false
+  - source: github:quartz-community/cname
+    enabled: false
+  - source: github:quartz-community/canvas-page
+    enabled: false
+  - source: github:quartz-community/content-page
+    enabled: true
+  # 社区版 folder-page 已由本地 folder-page-pro 替代（fork quartz-community/folder-page）：
+  # 文件列表按 configuration.listingSort（目录级 field + order，逐级向上继承）渲染，
+  # 比较器由 config-loader 按插件名注入 plugin.options.sort；pageType 仍为 folder。
+  - source: github:quartz-community/folder-page
+    enabled: false
+  - source: ../plugins-local/folder-page-pro
+    enabled: true
+  - source: github:quartz-community/tag-page
+    enabled: true
+  - source: github:quartz-community/bases-page
+    enabled: false
+  # 本地虚拟节点占位页（v4 `VirtualNodePage` 迁移）：pageType 插件，
+  # 用 generate() 为「被引用但不存在」的页面造占位页；布局键见文件末尾 layout.byPageType
+  - source: ../plugins-local/virtual-node-pro
+    enabled: true
+  # 维度聚合页（pageType + emitter + 组件）：
+  # 构建期按 configuration.aggregation 造 _dimensions/** 虚拟页，图谱渲染复用 graph-pro。
+  # 多组件插件：每个组件各写一条条目，并用 layout.component 指定导出名（核心补丁 #8）
+  - source: ../plugins-local/aggregation-page-pro
+    enabled: true
+    order: 56
+    layout:
+      position: beforeBody
+      priority: 20
+      component: AggregationNav
+  # 右上角「本目录聚合配置」按钮（当前目录规则链为空时构建期不渲染）
+  - source: ../plugins-local/aggregation-page-pro
+    enabled: true
+    order: 56
+    layout:
+      position: header
+      priority: 40
+      component: AggregationConfigToggle
+  - source: github:quartz-community/explorer
+    enabled: false
+    layout:
+      position: left
+      priority: 50
+  # 社区版 graph 已由本地 graph-pro 替代（d3/pixi 随插件本地打包，站点零外链）
+  - source: github:quartz-community/graph
+    enabled: false
+    layout:
+      position: right
+      priority: 10
+  - source: github:quartz-community/search
+    enabled: false
+    layout:
+      position: left
+      priority: 20
+      group: toolbar
+      groupOptions:
+        grow: true
+  - source: github:quartz-community/backlinks
+    enabled: false
+    layout:
+      position: right
+      priority: 30
+  # 本地 backlinks-pro（fork quartz-community/backlinks）：v4 反向链接优化移植 ——
+  # 运行时分组（数据源 graph-pro 局部图谱 JSON，回退 contentIndex.json），
+  # 分组规则运行时读 static/aggregation.json（与 graph/explorer 同语义），未配 aggregation 退化为平铺
+  - source: ../plugins-local/backlinks-pro
+    enabled: true
+    layout:
+      position: right
+      priority: 30
+  - source: github:quartz-community/article-title
+    enabled: true
+    layout:
+      position: beforeBody
+      priority: 10
+  - source: github:quartz-community/content-meta
+    enabled: false
+    layout:
+      position: beforeBody
+      priority: 20
+  - source: github:quartz-community/tag-list
+    enabled: true
+    layout:
+      position: beforeBody
+      priority: 30
+  - source: github:quartz-community/page-title
+    enabled: true
+    layout:
+      position: left
+      priority: 10
+  - source: github:quartz-community/darkmode
+    enabled: true
+    layout:
+      # 移出左侧工具栏，加入右上角按钮排（位置由 styles/custom.scss 里的 .darkmode 覆盖为 fixed）
+      position: header
+      priority: 5
+  - source: github:quartz-community/reader-mode
+    enabled: false
+    layout:
+      position: left
+      priority: 35
+      group: toolbar
+  - source: github:quartz-community/breadcrumbs
+    enabled: true
+    layout:
+      position: beforeBody
+      priority: 5
+      condition: not-index
+  - source: github:quartz-community/comments
+    enabled: false
+    options:
+      provider: giscus
+      options: {}
+    layout:
+      position: afterBody
+      priority: 10
+  - source: github:quartz-community/footer
+    enabled: false
+    options:
+      links: {}
+  - source: github:quartz-community/recent-notes
+    enabled: false
+  - source: github:quartz-community/spacer
+    enabled: true
+    options: {}
+    order: 25
+    layout:
+      position: left
+      priority: 25
+      display: mobile-only
+  # 社区版 note-properties 已由本地 note-properties-pro 替代
+  # （frontmatter 值支持 HTML 锚点渲染 + 附件链接自动挂 download）
+  - source: github:quartz-community/note-properties
+    enabled: false
+    options:
+      # 显示全部 frontmatter 字段：生成数据的维度字段是 type / status / priority / 组织(项目/任务) 等，
+      # 而 includeAll:false 时只会显示 includedProperties 里列的三项（description/tags/aliases），
+      # 数据里没有这三项 → 属性块渲染为空白（表现为"frontmatter 没渲染出来"）。
+      includeAll: true
+      # 仅在 includeAll 切回 false 时生效；这里保留一份维度字段清单备用
+      includedProperties:
+        - description
+        - tags
+        - aliases
+        - type
+        - status
+        - priority
+      excludedProperties: []
+      hidePropertiesView: false
+      delimiters: ---
+      language: yaml
+    order: 5
+    layout:
+      position: beforeBody
+      priority: 15
+      display: all
+  - source: ../plugins-local/note-properties-pro
+    enabled: true
+    options:
+      # —— 属性显示链（与 configuration.aggregation 同构，2026-09-26 引入）——
+      # 链 = 有序「白名单」：按目录决定正文属性面板显示哪些字段、以及显示顺序；
+      # 链外的字段（如 负责人）仍可参与聚合维度，只是不在面板显示 —— 这就是「只聚合、不显示」的写法。
+      # 配了 properties 后不能再配 includeAll: true（互斥，会直接抛错）。
+      includeAll: false
+      includedProperties: [description, tags, aliases, type, status, priority]
+      # 全局兜底：不管目录链是什么，title 都不在面板显示（避免与页面标题重复）
+      excludedProperties: [title]
+      properties:
+        folderDepth: 1
+        branches:
+          default: []
+          folders:
+            项目: [阶段, type, status, 负责人, tags]
+            任务: [status, 阶段, 级别, 负责人, tags]
+            人员: [category, type, 级别, 组织, tags]
+            组织: [type, 阶段, tags]
+            问答: [category, status, tags]
+      hidePropertiesView: false
+      delimiters: ---
+      language: yaml
+      # 新增能力（默认值即开启，显式写出便于调整）
+      htmlInProperties: true
+      downloadAttachments: true
+      attachmentExtensions: []
+      downloadNameFrom: alias
+    order: 5
+    layout:
+      position: beforeBody
+      priority: 15
+      display: all
+  - source: github:quartz-community/encrypted-pages
+    enabled: false
+    order: 900
+    layout:
+      position: body
+      priority: 100
+      display: all
+  - source: github:quartz-community/stacked-pages
+    enabled: false
+    layout:
+      position: afterBody
+      priority: 50
+      display: all
+  - source: ../plugins-local/reader-mode-pro
+    enabled: true
+    options: {}
+    order: 50
+    layout:
+      position: header
+      priority: 10
+  - source: ../plugins-local/footer-pro
+    enabled: true
+    options:
+      links: {}
+      copyright: 源悦科技
+    order: 50
+  - source: ../plugins-local/content-index-pro
+    enabled: true
+    options:
+      enableSiteMap: true
+      enableRSS: true
+      rssLimit: 10
+      rssFullHtml: false
+      rssSlug: index
+      includeEmptyFiles: true
+    order: 50
+  - source: ../plugins-local/search-pro
+    enabled: true
+    options:
+      enablePreview: true
+      fieldPriority:
+        - title
+        - content
+        - tags
+      initialDisplayCount: 10
+      loadMoreCount: 10
+    order: 50
+    layout:
+      position: left
+      priority: 20
+      group: toolbar
+      groupOptions:
+        grow: true
+  - source: ../plugins-local/explorer-pro
+    enabled: true
+    options:
+      folderDefaultState: collapsed
+      folderClickBehavior: link
+      useSavedState: true
+      virtualScrollWindowSize: 50
+      hideFiles: false
+      # 维度页是系统页：左侧目录树里屏蔽 `_dimensions`（入口由「动态分类子节点」与文件夹页维度入口提供）
+      excludePathPrefixes: [_dimensions]
+      # 动态分类：目录下挂「维度 → 取值」子节点（依赖 configuration.aggregation；未配该目录链的目录不挂）
+      dimensionFolders: true
+      dimensionMaxValues: 20
+      dimensionMaxLevels: 2
+    order: 50
+    layout:
+      position: left
+      priority: 50
+  # 本地 graph-pro（fork quartz-community/graph）：构建期预计算 + 提供图谱 UI（局部/全局）
+  # 键名对齐 v4 settings/<domain>/quartz.{config,layout}.json 的 graph 段，将来 per-domain 注入无需改插件
+  # d3@7 / pixi.js@8 已随插件打包（不再走 jsdelivr CDN，见 src/components/scripts/graph.inline.ts）
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: &graph-pro-options
+      graph:
+        precomputeLocal: true
+        localDepth: 1
+      localGraph:
+        # 局部图谱：邻居的目录/字段分组统一复用 configuration.aggregation（shared 模式）；
+        # 不再写 aggregation（旧写法 localGraph.aggregation: [{type: folder, depth: 1}] 已移除，改由图内解析层合成）。
+        # 展开聚合节点后是否保留「子节点 ↔ 原中心」的真实连线：局部图谱 false（只留聚合结构，画面更干净）
+        showAggregatedNodeLinks: false
+        drag: true
+        zoom: true
+        depth: 1
+        scale: 1.1
+        # 以下数值对齐 v4 Graph.tsx 的 [TUNING]（间距调大，避免节点/长标题重叠与"边太短"）
+        repelForce: 0.6
+        centerForce: 0.3
+        linkDistance: 70
+        fontSize: 0.75
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: false
+        enableRadial: false
+      # 文件夹页正文图谱（FolderGraph 组件，见下方第三条 graph-pro 条目）的力参数覆盖：
+      # 只覆盖 linkDistance，其余沿用 globalGraph（FolderGraph.tsx: linkDistance = folderGraph.linkDistance ?? globalGraph.linkDistance）。
+      # 125 比全局的 150 略紧，适配正文较窄的宽度，长标题不易互相压叠。
+      folderGraph:
+        linkDistance: 125
+      globalGraph:
+        # 展开聚合节点后是否保留「子节点 ↔ 原中心」的真实连线；false 避免与聚合连线同时出现
+        showAggregatedNodeLinks: false
+        enabled: true
+        # —— 首屏与分组（2026-09-26 简化）——
+        # 已删除：regionRules / globalGraph.aggregation / coreNodeFilter / localGraph.aggregation。
+        # 邻居分组统一复用 configuration.aggregation（有则按目录各自的字段链，无则兜底「仅按文件夹」）；
+        # 首屏大区恒为「文件夹」，核心节点 = 主体文件夹白名单命中者。三者由图内解析层合成，运行期零改动。
+        # folders：主体文件夹白名单 → 首屏大区 = 这些文件夹；空 / 缺省 = 全部文件夹。
+        # 项目 + 组织 = 首屏两个大区（各自的核心节点 = 该文件夹白名单命中者）。
+        folders: [项目, 组织]
+        # 展开大区后核心节点保持收起（需再点具体节点才展开其邻域）
+        expandCoresOnRegionOpen: false
+        coreNodeLimit: 50
+        # 全局核心集合只取共享字段链的前 N 项（文件夹分区不占层数；插件默认即 2，显式写出便于调整）
+        coreAggregationMaxLevels: 2
+        # 核心节点中心数字：关联数 ≥7 才显示，>120 显示为 120+
+        countLabelMin: 7
+        countLabelMaxDisplay: 120
+        startCollapsed: true
+        filterNonCoreNodes: true
+        drag: true
+        zoom: true
+        depth: -1
+        scale: 0.9
+        # 以下数值对齐 v4 Graph.tsx 的 [TUNING]（全局图谱节点更分散，长标题不易重叠）
+        repelForce: 1.5
+        centerForce: 0.4
+        linkDistance: 150
+        fontSize: 0.72
+        opacityScale: 1
+        showTags: true
+        removeTags: []
+        focusOnHover: true
+        enableRadial: true
+    order: 55
+    layout:
+      position: right
+      priority: 10
+      # 多组件插件必须显式指定组件：Graph = 侧栏局部图谱
+      component: Graph
+  # 文件夹页正文图谱：复用同一份局部产物和目录聚合选择。
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: *graph-pro-options
+    order: 55
+    layout:
+      position: beforeBody
+      priority: 10
+      component: FolderGraph
+  # 全局图谱宿主（GlobalGraphOverlay）：只渲染 `.global-graph-outer` 覆盖层，放到 header。
+  # header 与阅读模式/深色模式按钮同级，**任何页面类型都不会被清空** →
+  # 文件夹页/维度页即使清空了右栏，右上角仍能打开全局图谱。
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: *graph-pro-options
+    order: 56
+    layout:
+      position: header
+      priority: 30
+      component: GlobalGraphOverlay
+layout:
+  groups:
+    toolbar:
+      priority: 35
+      direction: row
+      gap: 0.5rem
+  byPageType:
+    "404":
+      positions:
+        beforeBody: []
+        left: []
+        right: []
+    content: {}
+    folder:
+      exclude:
+        - reader-mode
+        - graph
+        - backlinks
+      positions:
+        right: []
+    tag:
+      exclude:
+        - reader-mode
+        - graph
+        - backlinks
+      positions:
+        right: []
+    canvas: {}
+    bases: {}
+    # 维度聚合页：图谱在正文区（由插件自己的容器承载），所以只清空右栏。
+    # ⚠️ 不要用 exclude 去 graph-pro：那会连 header 里的全局图谱宿主一起移除。
+    # 注意 exclude 匹配的是插件来源名：本地图谱 fork 是 graph-pro（不是 graph）
+    aggregation-page:
+      exclude:
+        - backlinks
+      positions: { right: [] }
+    # 虚拟节点占位页：与内容页一致（右栏图谱/Backlinks/TOC 保留，header 按钮一律保留）。
+    # 不再排掉阅读模式按钮（旧配置是 `exclude: [reader-mode-pro]`）
+    virtual-node: {}

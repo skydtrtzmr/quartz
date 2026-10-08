@@ -15,7 +15,9 @@ export async function glob(
     await globby(pattern, {
       cwd,
       ignore: ignorePatterns,
-      gitignore: true,
+      gitignore: false,
+      // [M] 不使用.gitignore的规则进行input目录的扫描（v4 同款补丁：
+      // 仓库根 .gitignore 含 /input，若尊重 gitignore 会扫到 0 个文件）
     })
   ).map(toPosixPath)
   return fps as FilePath[]

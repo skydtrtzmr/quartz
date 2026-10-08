@@ -11,10 +11,21 @@ export const CommonArgv = {
     default: false,
     describe: "print out extra logging information",
   },
+  concurrency: {
+    number: true,
+    alias: ["c"],
+    describe: "max parallel operations (default: number of CPU cores)",
+  },
 }
 
 export const CreateArgv = {
   ...CommonArgv,
+  template: {
+    string: true,
+    alias: ["t"],
+    choices: ["default", "obsidian", "ttrpg", "blog"],
+    describe: "template to use for initial configuration",
+  },
   source: {
     string: true,
     alias: ["s"],
@@ -25,6 +36,11 @@ export const CreateArgv = {
     alias: ["X"],
     choices: ["new", "copy", "symlink"],
     describe: "strategy for content folder setup",
+  },
+  baseUrl: {
+    string: true,
+    alias: ["b"],
+    describe: "base URL for your Quartz site (e.g. mysite.github.io/quartz)",
   },
   links: {
     string: true,
@@ -65,6 +81,26 @@ export const BuildArgv = {
     alias: ["o"],
     default: "public",
     describe: "output folder for files",
+  },
+  settings: {
+    string: true,
+    alias: ["s"],
+    describe:
+      "path to a settings config to use instead of quartz.config.yaml (a yaml file, or a directory containing quartz.config.yaml)",
+  },
+  sqlite: {
+    boolean: true,
+    default: false,
+    describe: "enable SQLite-based persistent incremental build",
+  },
+  reset: {
+    boolean: true,
+    default: false,
+    describe: "reset the SQLite cache and output directory before building",
+  },
+  cacheDir: {
+    string: true,
+    describe: "directory used to store the SQLite incremental build cache",
   },
   serve: {
     boolean: true,
@@ -112,9 +148,5 @@ export const BuildArgv = {
     boolean: true,
     default: false,
     describe: "show detailed bundle information",
-  },
-  concurrency: {
-    number: true,
-    describe: "how many threads to use to parse notes",
   },
 }

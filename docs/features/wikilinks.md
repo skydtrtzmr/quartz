@@ -8,6 +8,8 @@ Quartz supports Wikilinks by default and these links are resolved by Quartz usin
 
 This is enabled as a part of [[Obsidian compatibility]] and can be configured and enabled/disabled from that plugin.
 
+Wikilink matching is case-insensitive to mirror Obsidian: `[[My Note]]`, `[[my note]]`, and `[[MY NOTE]]` all resolve to the same file. The generated URL is lowercased (e.g. `my-note`).
+
 ## Syntax
 
 - `[[Path to file]]`: produces a link to `Path to file.md` (or `Path-to-file.md`) with the text `Path to file`
@@ -19,6 +21,6 @@ This is enabled as a part of [[Obsidian compatibility]] and can be configured an
 
 - `![[Path to image]]`: embeds an image into the page
 - `![[Path to image|100x145]]`: embeds an image into the page with dimensions 100px by 145px
-- `![[Path to file]]`: transclude an entire page
+- `![[Path to file]]`: transclude an entire page. Select its title to collapse or expand the content.
 - `![[Path to file#Anchor]]`: transclude everything under the header `Anchor`
 - `![[Path to file#^b15695]]`: transclude block with ID `^b15695`
