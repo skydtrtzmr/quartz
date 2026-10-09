@@ -40,3 +40,20 @@
     fill: var(--darkgray);
   }
 }
+
+// ===== 左右留白：只改 $sidebar-pad-x 一个值 =====
+// 留白来源（quartz/styles/base.scss）：
+//   ① 侧栏左右 padding 2rem（base.scss:225）—— 窄屏下留白的全部；
+//   ② .page 居中 + max-width 1500px（base.scss:162-164）—— 仅当视口 > 1500px 时额外叠加
+//      (视口宽 - 1500px) / 2 的居中留白（想改就放开下面被注释的 .page 规则）。
+$sidebar-pad-x: 1.5rem; // 1rem 偏紧 / 1.5rem 适中 / 2rem = Quartz 原样
+
+:root .page > #quartz-body > .sidebar {
+  padding-left: $sidebar-pad-x;
+  padding-right: $sidebar-pad-x;
+}
+
+// 可选：让宽屏也只剩固定留白（取消 1500px 居中）
+// :root .page {
+//   max-width: 100%;
+// }

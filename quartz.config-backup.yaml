@@ -150,9 +150,6 @@ plugins:
     enabled: false
   - source: github:quartz-community/content-page
     enabled: true
-  # 社区版 folder-page 已由本地 folder-page-pro 替代（fork quartz-community/folder-page）：
-  # 文件列表按 configuration.listingSort（目录级 field + order，逐级向上继承）渲染，
-  # 比较器由 config-loader 按插件名注入 plugin.options.sort；pageType 仍为 folder。
   - source: github:quartz-community/folder-page
     enabled: false
   - source: ../plugins-local/folder-page-pro
@@ -322,6 +319,7 @@ plugins:
             人员: [category, type, 级别, 组织, tags]
             组织: [type, 阶段, tags]
             问答: [category, status, tags]
+            Assets: [附件, 附件下载, 附件下载链接, 附件链接]
       hidePropertiesView: false
       delimiters: ---
       language: yaml
@@ -396,12 +394,8 @@ plugins:
       useSavedState: true
       virtualScrollWindowSize: 50
       hideFiles: false
-      # 目录树屏蔽：_dimensions = 维度系统页；assets = 根目录 Assets（页面仍存在，只是不上树）。
-      # 注意 slug 由 slugifyPath 强制小写，且相对内容根、不含 baseUrl：
-      #   根目录 Assets 必须写 `assets`（界面显示的是磁盘原名「Assets」，别照抄）。
-      #   判断是从 0 开始的前缀匹配，非精确目录名：`assets` 会连带 `assets-old`，要精确写全链路（如 素材/assets）。
-      #   命中整枝剪掉，写目录名即可；只影响目录树，要彻底不进站点用 configuration.ignorePatterns。
-      excludePathPrefixes: [_dimensions, assets]
+      # 维度页是系统页：左侧目录树里屏蔽 `_dimensions`（入口由「动态分类子节点」与文件夹页维度入口提供）
+      excludePathPrefixes: [_dimensions]
       # 动态分类：目录下挂「维度 → 取值」子节点（依赖 configuration.aggregation；未配该目录链的目录不挂）
       dimensionFolders: true
       dimensionMaxValues: 20
@@ -463,6 +457,7 @@ plugins:
         countLabelMin: 7
         countLabelMaxDisplay: 120
         startCollapsed: true
+        filterOrphans: true
         filterNonCoreNodes: true
         drag: true
         zoom: true
@@ -538,6 +533,7 @@ layout:
     # 注意 exclude 匹配的是插件来源名：本地图谱 fork 是 graph-pro（不是 graph）
     aggregation-page:
       exclude:
+        - aggregation-page-pro
         - backlinks
       positions: { right: [] }
     # 虚拟节点占位页：与内容页一致（右栏图谱/Backlinks/TOC 保留，header 按钮一律保留）。
