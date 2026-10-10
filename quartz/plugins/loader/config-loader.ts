@@ -60,7 +60,10 @@ function resolveSettingsPath(): string | undefined {
 
   if (!value || value.startsWith("-")) {
     console.warn(
-      styleText("yellow", `[settings] --settings 缺少有效路径，回退默认配置（${CONFIG_YAML_PATH}）`),
+      styleText(
+        "yellow",
+        `[settings] --settings 缺少有效路径，回退默认配置（${CONFIG_YAML_PATH}）`,
+      ),
     )
     return undefined
   }
@@ -88,7 +91,10 @@ function resolveConfigPath(): string {
   if (settingsPath) {
     const isDir = fs.statSync(settingsPath).isDirectory()
     const candidates = isDir
-      ? [path.join(settingsPath, "quartz.config.yaml"), path.join(settingsPath, "quartz.config.yml")]
+      ? [
+          path.join(settingsPath, "quartz.config.yaml"),
+          path.join(settingsPath, "quartz.config.yml"),
+        ]
       : [settingsPath]
     for (const candidate of candidates) {
       if (fs.existsSync(candidate)) {
@@ -109,8 +115,9 @@ function resolveConfigPath(): string {
 
 function parseConfigFile(configPath: string): QuartzPluginsJson {
   const raw = fs.readFileSync(configPath, "utf-8")
-  const config = (configPath.endsWith(".yaml") || configPath.endsWith(".yml")
-    ? YAML.parse(raw) : JSON.parse(raw)) as QuartzPluginsJson
+  const config = (
+    configPath.endsWith(".yaml") || configPath.endsWith(".yml") ? YAML.parse(raw) : JSON.parse(raw)
+  ) as QuartzPluginsJson
   const listingSort = normalizeListingSort(config.configuration?.listingSort)
   for (const plugin of config.plugins ?? []) {
     const name = extractPluginName(plugin.source)
@@ -181,6 +188,11 @@ function formatSourceDisplay(source: PluginSource): string {
 function sourceKey(source: PluginSource): string {
   if (typeof source === "string") return source
   return JSON.stringify(source)
+}
+
+/** Layout-only entries remain enabled but do not register a processing plugin. */
+export function shouldRegisterProcessing(entry: PluginJsonEntry): boolean {
+  return entry.enabled && entry.processing !== false
 }
 
 interface DependencyValidationResult {
@@ -418,6 +430,18 @@ export async function loadQuartzConfig(
 
   for (const entry of enabledEntries) {
     const manifest = manifests.get(sourceKey(entry.source))
+    if (!shouldRegisterProcessing(entry)) {
+      // Layout-only entries still need their components registered, including when
+      // there is no separate processing entry for this plugin.
+      const pluginName = extractPluginName(entry.source)
+      if (manifest?.components && Object.keys(manifest.components).length > 0) {
+        await loadComponentsFromPackage(pluginName, manifest)
+      }
+      if (manifest?.frames && Object.keys(manifest.frames).length > 0) {
+        await loadFramesFromPackage(pluginName, manifest)
+      }
+      continue
+    }
     const category = manifest?.category
     // Resolve processing categories: for array categories (e.g. ["transformer", "pageType", "component"]),
     // push the plugin into ALL matching processing category buckets.

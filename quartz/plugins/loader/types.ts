@@ -164,6 +164,8 @@ export type PluginSource = string | PluginSourceObject
 export interface PluginJsonEntry {
   source: PluginSource
   enabled: boolean
+  /** Set false when this entry only places a component in the layout. */
+  processing?: boolean
   options?: Record<string, unknown>
   order?: number
   layout?: PluginLayoutDeclaration

@@ -421,6 +421,7 @@ plugins:
       graph:
         precomputeLocal: true
         localDepth: 1
+        maxVisibleNodes: 500
       localGraph:
         # 局部图谱：邻居的目录/字段分组统一复用 configuration.aggregation（shared 模式）；
         # 不再写 aggregation（旧写法 localGraph.aggregation: [{type: folder, depth: 1}] 已移除，改由图内解析层合成）。
@@ -463,7 +464,7 @@ plugins:
         coreAggregationMaxLevels: 2
         # 核心节点中心数字：关联数 ≥7 才显示，>120 显示为 120+
         countLabelMin: 7
-        countLabelMaxDisplay: 120
+        countLabelMaxDisplay: 999
         startCollapsed: true
         filterNonCoreNodes: true
         drag: true
@@ -487,8 +488,10 @@ plugins:
       # 多组件插件必须显式指定组件：Graph = 侧栏局部图谱
       component: Graph
   # 文件夹页正文图谱：复用同一份局部产物和目录聚合选择。
+  # 只放置组件；GraphPro emitter 已由上面的条目注册一次。
   - source: ../plugins-local/graph-pro
     enabled: true
+    processing: false
     options: *graph-pro-options
     order: 55
     layout:
@@ -498,8 +501,10 @@ plugins:
   # 全局图谱宿主（GlobalGraphOverlay）：只渲染 `.global-graph-outer` 覆盖层，放到 header。
   # header 与阅读模式/深色模式按钮同级，**任何页面类型都不会被清空** →
   # 文件夹页/维度页即使清空了右栏，右上角仍能打开全局图谱。
+  # 只放置组件，避免再次生成 graph/local 和 graph/global 数据。
   - source: ../plugins-local/graph-pro
     enabled: true
+    processing: false
     options: *graph-pro-options
     order: 56
     layout:

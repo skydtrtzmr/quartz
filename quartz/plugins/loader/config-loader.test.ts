@@ -1,6 +1,6 @@
 import test, { describe, afterEach } from "node:test"
 import assert from "node:assert"
-import { buildLayoutForEntries, resolveGroups } from "./config-loader"
+import { buildLayoutForEntries, resolveGroups, shouldRegisterProcessing } from "./config-loader"
 import { componentRegistry } from "../../components/registry"
 import type { QuartzComponent, QuartzComponentConstructor } from "../../components/types"
 import { PluginJsonEntry, LayoutPosition } from "./types"
@@ -32,6 +32,41 @@ afterEach(() => {
 })
 
 describe("position assignment", () => {
+  test("places three components of one plugin while registering processing once", () => {
+    const graph = makeComponent("Graph")
+    const folderGraph = makeComponent("FolderGraph")
+    const overlay = makeComponent("GlobalGraphOverlay")
+    componentRegistry.register("graph-pro/Graph", graph, "graph-pro")
+    componentRegistry.register("graph-pro/FolderGraph", folderGraph, "graph-pro")
+    componentRegistry.register("graph-pro/GlobalGraphOverlay", overlay, "graph-pro")
+
+    const entries: PluginJsonEntry[] = [
+      {
+        source: "graph-pro",
+        enabled: true,
+        layout: { position: "right", priority: 10, component: "Graph" },
+      },
+      {
+        source: "graph-pro",
+        enabled: true,
+        processing: false,
+        layout: { position: "beforeBody", priority: 10, component: "FolderGraph" },
+      },
+      {
+        source: "graph-pro",
+        enabled: true,
+        processing: false,
+        layout: { position: "header", priority: 10, component: "GlobalGraphOverlay" },
+      },
+    ]
+
+    assert.deepStrictEqual(entries.filter(shouldRegisterProcessing), [entries[0]])
+    const layout = buildLayoutForEntries(entries, {})
+    assert.deepStrictEqual(layout.right, [graph])
+    assert.deepStrictEqual(layout.beforeBody, [folderGraph])
+    assert.deepStrictEqual(layout.header, [overlay])
+  })
+
   test("places component in correct position from layout.position", () => {
     const component = makeComponent("MyPlugin")
     componentRegistry.register("my-plugin", component, "test-source")

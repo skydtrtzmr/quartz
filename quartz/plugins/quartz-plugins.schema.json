@@ -307,6 +307,10 @@
             "type": "boolean",
             "description": "Whether the plugin is enabled"
           },
+          "processing": {
+            "type": "boolean",
+            "description": "Whether this entry registers the plugin's transformer, filter, emitter, or page type. Set false for additional component placements. Defaults to true."
+          },
           "order": {
             "type": "number",
             "minimum": 0,
