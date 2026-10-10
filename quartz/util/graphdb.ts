@@ -18,6 +18,8 @@ export interface GraphNode {
   id: string
   type: NodeType
   mtime?: number
+  // entity 节点的内容哈希（变更检测第二级判据），见 getChangedFiles
+  content_hash?: string
   frontmatter?: string
   date_created?: string
   date_modified?: string
@@ -67,6 +69,7 @@ export class GraphDatabase {
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL CHECK(type IN ('entity', 'virtual', 'tag')),
         mtime INTEGER,
+        content_hash TEXT,
         frontmatter TEXT,
         date_created TEXT,
         date_modified TEXT,
@@ -87,15 +90,23 @@ export class GraphDatabase {
       CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target);
       CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(type);
     `)
+
+    // 旧库迁移：CREATE TABLE IF NOT EXISTS 不会给已存在的表加列，这里幂等补齐 content_hash。
+    // 正常使用方式是删除 cache 目录重建基线，这段只是兜底，避免旧库直接报 SQL 错误。
+    const columns = this.db.prepare("PRAGMA table_info(nodes)").all() as { name: string }[]
+    if (!columns.some((c) => c.name === "content_hash")) {
+      this.db.exec("ALTER TABLE nodes ADD COLUMN content_hash TEXT")
+    }
   }
 
   upsertNode(node: GraphNode): void {
     const stmt = this.db.prepare(`
-      INSERT INTO nodes (id, type, mtime, frontmatter, date_created, date_modified, date_published)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO nodes (id, type, mtime, content_hash, frontmatter, date_created, date_modified, date_published)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         mtime = excluded.mtime,
+        content_hash = excluded.content_hash,
         frontmatter = excluded.frontmatter,
         date_created = excluded.date_created,
         date_modified = excluded.date_modified,
@@ -106,6 +117,7 @@ export class GraphDatabase {
       node.id,
       node.type,
       node.mtime || null,
+      node.content_hash || null,
       node.frontmatter || null,
       node.date_created || null,
       node.date_modified || null,
@@ -158,22 +170,70 @@ export class GraphDatabase {
     return this.db.prepare("SELECT * FROM nodes").all() as unknown as GraphNode[]
   }
 
-  getChangedFiles(currentFiles: Map<FilePath, number>): {
+  /**
+   * 两级变更判定：
+   * 1. mtime 相同 → 未变更（不读文件，零开销）；
+   * 2. mtime 不同 → 由调用方经 computeHash 计算内容哈希复核：
+   *    - 哈希与库中一致 → 内容未变（mtime 被外部触碰），静默回写新 mtime、不计入 changed，
+   *      避免下轮对同一批文件重复计算哈希；
+   *    - 哈希不一致 / 库中无哈希 / computeHash 返回 undefined（读取失败）→ 保守判为 changed。
+   * mtime 应传入取整后的整数毫秒（Math.round），与回写侧保持同一精度。
+   */
+  getChangedFiles(
+    currentFiles: Map<FilePath, number>,
+    computeHash?: (fp: FilePath) => string | undefined,
+  ): {
     changed: FilePath[]
     deleted: FilePath[]
   } {
     const changed: FilePath[] = []
     const deleted: FilePath[] = []
+    const touchedUnchanged: { id: string; mtime: number }[] = []
 
+    const stmt = this.db.prepare(
+      "SELECT mtime, content_hash FROM nodes WHERE id = ? AND type = 'entity'",
+    )
     for (const [filePath, mtime] of currentFiles) {
       const id = filePath.replace(/\.md$/, "")
-      const node = this.db
-        .prepare("SELECT mtime FROM nodes WHERE id = ? AND type = 'entity'")
-        .get(id) as { mtime: number } | undefined
+      const node = stmt.get(id) as
+        | { mtime: number | null; content_hash: string | null }
+        | undefined
 
-      if (!node || node.mtime !== mtime) {
-        changed.push(filePath)
+      if (node && node.mtime === mtime) {
+        // 快路径：mtime 一致，零开销
+        continue
       }
+
+      if (!node) {
+        // 新文件：必然 changed；仍调用一次 computeHash 预热哈希缓存，
+        // 否则冷构建的回写拿不到哈希，content_hash 落 null，
+        // 下一轮 mtime 一被触碰就会全量误报（null != md5）。
+        if (computeHash) computeHash(filePath)
+        changed.push(filePath)
+        continue
+      }
+
+      if (computeHash) {
+        const currentHash = computeHash(filePath)
+        if (currentHash !== undefined && node.content_hash === currentHash) {
+          // mtime 被外部触碰但内容未变：静默回写新 mtime（保留原哈希），不标记 changed
+          touchedUnchanged.push({ id, mtime })
+          continue
+        }
+      }
+
+      changed.push(filePath)
+    }
+
+    if (touchedUnchanged.length > 0) {
+      this.transaction(() => {
+        const update = this.db.prepare(
+          "UPDATE nodes SET mtime = ? WHERE id = ? AND type = 'entity'",
+        )
+        for (const { id, mtime } of touchedUnchanged) {
+          update.run(mtime, id)
+        }
+      })
     }
 
     const dbIds = this.db.prepare("SELECT id FROM nodes WHERE type = 'entity'").all() as {

@@ -1,9 +1,10 @@
 import sourceMapSupport from "source-map-support"
 sourceMapSupport.install(options)
 import path from "path"
+import { createHash } from "crypto"
 import { PerfTimer } from "./util/perf"
 import { mkdir, rm, stat, unlink } from "fs/promises"
-import { existsSync, mkdirSync } from "fs"
+import { existsSync, mkdirSync, readFileSync } from "fs"
 import { GlobbyFilterFunction, isGitIgnored } from "globby"
 import { styleText } from "util"
 import { parseMarkdown } from "./processors/parse"
@@ -60,11 +61,24 @@ function getGraphDatabase(cacheDir?: string): GraphDatabase {
   return new GraphDatabase(path.join(dataDir, ".quartz-cache.db"))
 }
 
+function hashFile(fullPath: string): string | undefined {
+  try {
+    return createHash("md5").update(readFileSync(fullPath)).digest("hex")
+  } catch {
+    return undefined
+  }
+}
+
 async function detectChangedFiles(
   allFileNames: string[],
   graphDb: GraphDatabase,
   directory: string,
-): Promise<{ changed: FilePath[]; deleted: FilePath[] }> {
+): Promise<{
+  changed: FilePath[]
+  deleted: FilePath[]
+  /** 检测阶段已算出的内容哈希（仅 mtime mismatch 的文件），供回写循环复用，避免二次读文件 */
+  hashes: Map<FilePath, string>
+}> {
   const currentFiles = new Map<FilePath, number>()
   for (const fp of allFileNames) {
     if (!fp.endsWith(".md")) continue
@@ -72,13 +86,23 @@ async function detectChangedFiles(
     const fullPath = joinSegments(directory, fp) as FilePath
     try {
       const stats = await stat(fullPath)
-      currentFiles.set(fp as FilePath, stats.mtimeMs)
+      // 取整为整数毫秒：消除浮点亚毫秒在 stat/upsert 之间的精度抖动
+      currentFiles.set(fp as FilePath, Math.round(stats.mtimeMs))
     } catch {
       // The file disappeared between glob and stat; the next build will detect it.
     }
   }
 
-  return graphDb.getChangedFiles(currentFiles)
+  // 两级判定：mtime mismatch 的文件再算 md5 复核（回调只对 mismatch 文件触发）；
+  // 算过的哈希缓存在 hashes 里，回写循环直接复用。
+  const hashes = new Map<FilePath, string>()
+  const { changed, deleted } = graphDb.getChangedFiles(currentFiles, (fp) => {
+    const hash = hashFile(joinSegments(directory, fp))
+    if (hash) hashes.set(fp, hash)
+    return hash
+  })
+
+  return { changed, deleted, hashes }
 }
 
 function updateGraphDatabase(
@@ -268,11 +292,8 @@ async function buildQuartzIncremental(argv: Argv, mut: Mutex, clientRefresh: () 
     console.log(`Found ${markdownPaths.length} input files in ${perf.timeSince("glob")}`)
 
     perf.addEvent("detect-changes")
-    const { changed: changedFilePaths, deleted: deletedFilePaths } = await detectChangedFiles(
-      markdownPaths,
-      graphDb,
-      argv.directory,
-    )
+    const { changed: changedFilePaths, deleted: deletedFilePaths, hashes: detectedHashes } =
+      await detectChangedFiles(markdownPaths, graphDb, argv.directory)
     console.log(`Detected ${changedFilePaths.length} changed, ${deletedFilePaths.length} deleted`)
 
     ctx.allFiles = allFiles
@@ -413,7 +434,12 @@ async function buildQuartzIncremental(argv: Argv, mut: Mutex, clientRefresh: () 
         const id = relativePath.replace(/\.md$/, "")
         const node = graphDb.getNode(id)
         if (node?.type === "entity") {
-          graphDb.upsertNode({ ...node, mtime: stats.mtimeMs })
+          graphDb.upsertNode({
+            ...node,
+            // 与检测阶段同精度（整数毫秒）；哈希复用检测期算好的，文件未重读
+            mtime: Math.round(stats.mtimeMs),
+            content_hash: detectedHashes.get(relativePath as FilePath) ?? node.content_hash,
+          })
         }
       } catch (err) {
         console.error(`Failed to update mtime for ${fullPath}:`, err)
