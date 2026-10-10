@@ -178,6 +178,7 @@ plugins:
   # 右上角「本目录聚合配置」按钮（当前目录规则链为空时构建期不渲染）
   - source: ../plugins-local/aggregation-page-pro
     enabled: true
+    processing: false
     order: 56
     layout:
       position: header
