@@ -408,7 +408,7 @@ plugins:
       # 动态分类：目录下挂「维度 → 取值」子节点（依赖 configuration.aggregation；未配该目录链的目录不挂）
       dimensionFolders: true
       dimensionMaxValues: 20
-      dimensionMaxLevels: 2
+      dimensionMaxLevels: 3
     order: 50
     layout:
       position: left
