@@ -423,6 +423,8 @@ plugins:
         precomputeLocal: true
         localDepth: 1
         maxVisibleNodes: 500
+        # 「+N」溢出占位节点每次点击加载的节点数（默认 100）
+        loadBatchSize: 100
       localGraph:
         # 局部图谱：邻居的目录/字段分组统一复用 configuration.aggregation（shared 模式）；
         # 不再写 aggregation（旧写法 localGraph.aggregation: [{type: folder, depth: 1}] 已移除，改由图内解析层合成）。
