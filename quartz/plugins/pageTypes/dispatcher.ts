@@ -233,9 +233,12 @@ export const PageTypeDispatcher: QuartzEmitterPlugin<Partial<DispatcherOptions>>
       }
 
       // Phase 3: Emit virtual pages
+      // Virtual pages need an ancestry chain too (e.g. breadcrumbs). Keep the
+      // regular content trie unchanged and build this rendering context once.
+      const virtualPageCtx = { ...ctx, trie: trieFromAllFiles(allFilesWithVirtual) }
       for (const ve of virtualEntries) {
         yield emitPage(
-          ctx,
+          virtualPageCtx,
           ve.vpSlug,
           ve.tree,
           ve.vfile.data,
@@ -327,9 +330,10 @@ export const PageTypeDispatcher: QuartzEmitterPlugin<Partial<DispatcherOptions>>
       }
 
       // Phase 3: Emit virtual pages
+      const virtualPageCtx = { ...ctx, trie: trieFromAllFiles(allFilesWithVirtual) }
       for (const ve of virtualEntries) {
         yield emitPage(
-          ctx,
+          virtualPageCtx,
           ve.vpSlug,
           ve.tree,
           ve.vfile.data,

@@ -892,12 +892,11 @@ export function buildLayoutForEntries(
       )
     if (!reg) continue
 
+    const opts = { ...entry.options, ...componentRegistry.getOptionOverrides(name) }
     let component: QuartzComponent
     if (typeof reg.component === "function" && !("displayName" in reg.component)) {
       // It's a constructor — use registry cache to avoid duplicate instances
       // (and duplicate afterDOMLoaded scripts) across page-type layouts
-      const tsOverrides = componentRegistry.getOptionOverrides(name)
-      const opts = { ...entry.options, ...tsOverrides }
       const optsArg = Object.keys(opts).length > 0 ? opts : undefined
       component = componentRegistry.instantiate(
         reg.component as QuartzComponentConstructor,
@@ -906,6 +905,8 @@ export function buildLayoutForEntries(
     } else {
       component = reg.component as QuartzComponent
     }
+
+    if (name === "article-title") component.isPageTitle = true
 
     // Apply display modifier
     if (layout.display && layout.display !== "all") {
@@ -951,10 +952,9 @@ export function buildLayoutForEntries(
       continue
     }
 
+    const opts = { ...entry.options, ...componentRegistry.getOptionOverrides(name) }
     let component: QuartzComponent
     if (typeof reg.component === "function" && !("displayName" in reg.component)) {
-      const tsOverrides = componentRegistry.getOptionOverrides(name)
-      const opts = { ...entry.options, ...tsOverrides }
       const optsArg = Object.keys(opts).length > 0 ? opts : undefined
       component = componentRegistry.instantiate(
         reg.component as QuartzComponentConstructor,
@@ -963,6 +963,8 @@ export function buildLayoutForEntries(
     } else {
       component = reg.component as QuartzComponent
     }
+
+    if (name === "article-title") component.isPageTitle = true
 
     posArray.push({
       component,

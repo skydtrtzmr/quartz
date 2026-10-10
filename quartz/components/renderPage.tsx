@@ -334,7 +334,7 @@ export function renderPage(
   const {
     head: Head,
     header,
-    beforeBody,
+    beforeBody: configuredBeforeBody,
     pageBody: Content,
     afterBody,
     left,
@@ -342,6 +342,25 @@ export function renderPage(
     footer,
     frame: frameName,
   } = components
+  // A page title already labels the document; omit only a matching leading
+  // Markdown H1, retaining every distinct heading and the original source file.
+  if (configuredBeforeBody.some((component) => component.isPageTitle)) {
+    const first = root.children.findIndex((node) => node.type === "element")
+    const heading = root.children[first]
+    const title = String(componentData.fileData.frontmatter?.title ?? "").trim()
+    const headingText = (node: ElementContent): string => node.type === "text" ? node.value
+      : node.type === "element" ? node.children.map(headingText).join("") : ""
+    if (heading?.type === "element" && heading.tagName === "h1" && headingText(heading).trim() === title) {
+      root.children.splice(first, 1)
+    }
+  }
+  // Collection widgets follow the folder introduction, even when configured
+  // in beforeBody. The pageBody then renders its listing.
+  const beforeBody = Content.pageIntroduction
+    ? [...configuredBeforeBody.filter((component) => !component.afterPageIntroduction),
+      Content.pageIntroduction,
+      ...configuredBeforeBody.filter((component) => component.afterPageIntroduction)]
+    : configuredBeforeBody
   const Body = BodyConstructor()
   const frame = resolveFrame(frameName)
 

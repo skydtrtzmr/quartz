@@ -62,7 +62,9 @@ export function trieFromAllFiles(allFiles: QuartzPluginData[]): FileTrieNode<Bui
         ...file,
         slug: file.slug!,
         title: file.frontmatter.title,
-        filePath: file.filePath!,
+        // Generated pages have a route, but no physical Markdown file. The
+        // trie needs a logical path to determine their extension and ancestry.
+        filePath: file.filePath ?? `${file.slug}.md` as FilePath,
       })
     }
   })

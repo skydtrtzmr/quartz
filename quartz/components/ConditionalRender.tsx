@@ -17,6 +17,8 @@ export default ((config: ConditionalRenderConfig) => {
   ConditionalRender.afterDOMLoaded = config.component.afterDOMLoaded
   ConditionalRender.beforeDOMLoaded = config.component.beforeDOMLoaded
   ConditionalRender.css = config.component.css
+  ConditionalRender.afterPageIntroduction = config.component.afterPageIntroduction
+  ConditionalRender.isPageTitle = config.component.isPageTitle
 
   return ConditionalRender
 }) satisfies QuartzComponentConstructor<ConditionalRenderConfig>

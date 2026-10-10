@@ -23,6 +23,10 @@ export type QuartzComponent = ((props: QuartzComponentProps) => any) & {
   css?: StringResource
   beforeDOMLoaded?: StringResource
   afterDOMLoaded?: StringResource
+  /** Introductory body content rendered before collection widgets. */
+  pageIntroduction?: QuartzComponent
+  afterPageIntroduction?: boolean
+  isPageTitle?: boolean
 }
 
 export type QuartzComponentConstructor<Options extends object | undefined = undefined> = (
