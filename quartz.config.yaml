@@ -286,7 +286,7 @@ plugins:
       # 显示全部 frontmatter 字段：生成数据的维度字段是 type / status / priority / 组织(项目/任务) 等，
       # 而 includeAll:false 时只会显示 includedProperties 里列的三项（description/tags/aliases），
       # 数据里没有这三项 → 属性块渲染为空白（表现为"frontmatter 没渲染出来"）。
-      includeAll: true
+      includeAll: false
       # 仅在 includeAll 切回 false 时生效；这里保留一份维度字段清单备用
       includedProperties:
         - description
@@ -325,6 +325,7 @@ plugins:
             人员: [category, type, 级别, 组织, tags]
             组织: [type, 阶段, tags]
             问答: [category, status, tags]
+            Assets: [附件, 附件下载, 附件下载链接, 附件链接, 下载链接]
       hidePropertiesView: false
       delimiters: ---
       language: yaml
