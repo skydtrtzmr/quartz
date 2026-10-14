@@ -20,7 +20,7 @@ configuration:
     folderDepth: 1
     branches:
       default: []
-      folders:
+      folders: {}
   defaultDateType: modified
   listingSort:
     default: title
