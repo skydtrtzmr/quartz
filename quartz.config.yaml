@@ -410,9 +410,8 @@ plugins:
       graph:
         precomputeLocal: true
         localDepth: 1
-        maxVisibleNodes: 500
-        # 「+N」溢出占位节点每次点击加载的节点数（默认 100）
-        loadBatchSize: 100
+        # 每个聚合节点首次展开及加载更多的子节点数量
+        expandBatchSize: 20
       localGraph:
         # 局部图谱：邻居的目录/字段分组统一复用 configuration.aggregation（shared 模式）；
         # 不再写 aggregation（旧写法 localGraph.aggregation: [{type: folder, depth: 1}] 已移除，改由图内解析层合成）。
@@ -447,7 +446,7 @@ plugins:
         # 首屏大区恒为「文件夹」，核心节点 = 主体文件夹白名单命中者。三者由图内解析层合成，运行期零改动。
         # folders：主体文件夹白名单 → 首屏大区 = 这些文件夹；空 / 缺省 = 全部文件夹。
         # 项目 + 组织 = 首屏两个大区（各自的核心节点 = 该文件夹白名单命中者）。
-        folders: [项目, 组织]
+        folders: []
         # 展开大区后核心节点保持收起（需再点具体节点才展开其邻域）
         expandCoresOnRegionOpen: false
         coreNodeLimit: 50
