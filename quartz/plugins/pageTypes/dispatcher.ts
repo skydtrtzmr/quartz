@@ -2,7 +2,7 @@ import { QuartzEmitterPlugin, QuartzPageTypePluginInstance, TreeTransform } from
 import { QuartzComponent, QuartzComponentProps } from "../../components/types"
 import { pageResources, renderPage } from "../../components/renderPage"
 import { FullPageLayout } from "../../cfg"
-import { FilePath, FullSlug, pathToRoot } from "../../util/path"
+import { FilePath, FullSlug, pathToRoot, slugifyFilePath } from "../../util/path"
 import { ProcessedContent, defaultProcessedContent } from "../vfile"
 import { write } from "../emitters/helpers"
 import { BuildCtx, trieFromAllFiles } from "../../util/ctx"
@@ -10,6 +10,8 @@ import { StaticResources } from "../../util/resources"
 import { render } from "preact-render-to-string"
 import { fromHtml } from "hast-util-from-html"
 import { Root as HtmlRoot } from "hast"
+import path from "node:path"
+import { ancestorFolderPages } from "../../util/folderDependencies"
 
 function getPageTypes(ctx: BuildCtx): QuartzPageTypePluginInstance[] {
   return (ctx.cfg.plugins.pageTypes ?? []) as unknown as QuartzPageTypePluginInstance[]
@@ -272,6 +274,14 @@ export const PageTypeDispatcher: QuartzEmitterPlugin<Partial<DispatcherOptions>>
       for (const slug of ctx.affectedSlugs ?? []) {
         changedSlugs.add(slug)
       }
+      // Watch builds also use partialEmit; directory dependencies are not link edges.
+      const changedPaths = changeEvents
+        .filter(event => String(event.path).endsWith(".md"))
+        .map(event => event.file?.data.slug ?? slugifyFilePath(
+          (path.isAbsolute(event.path) ? path.relative(ctx.argv.directory, event.path) : event.path)
+            .replace(/\\/g, "/") as FilePath,
+        ))
+      for (const slug of ancestorFolderPages(changedPaths)) changedSlugs.add(slug)
 
       // Phase 1: Generate all virtual pages first so their data is available in allFiles
       const virtualEntries: Array<{

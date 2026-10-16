@@ -165,6 +165,13 @@ document.addEventListener("render", setupMyComponent)
 
 It is best practice to track any event handlers via `window.addCleanup` to prevent memory leaks during SPA navigation.
 
+Popover previews have a separate lifecycle. After attaching a preview, Quartz dispatches
+`popover-created` on `document` with `detail: { container: HTMLElement, url: string }`.
+Plugins can initialize content inside that container using the target URL's query
+parameters. Do not dispatch a global `nav` or `render` event for a preview: that would
+also reinitialize the host page. Preview cache keys include the query string; fragments
+share the same preview and only control its scroll position.
+
 #### Importing Code
 
 In community plugins, TypeScript scripts should be transpiled at build time. The plugin template includes an `inlineScriptPlugin` in `tsup.config.ts` that automatically transpiles `.inline.ts` files imported as text:

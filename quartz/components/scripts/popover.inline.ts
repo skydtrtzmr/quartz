@@ -1,6 +1,7 @@
 import { computePosition, flip, inline, shift } from "@floating-ui/dom"
 import { normalizeRelativeURLs } from "../../util/path"
 import { fetchCanonical } from "./util"
+import { popoverTarget } from "./popoverTarget"
 
 const p = new DOMParser()
 let activeAnchor: HTMLAnchorElement | null = null
@@ -42,11 +43,7 @@ async function mouseEnterHandler(
     }
   }
 
-  const targetUrl = new URL(link.href)
-  const hash = decodeURIComponent(targetUrl.hash)
-  targetUrl.hash = ""
-  targetUrl.search = ""
-  const popoverId = `popover-${link.pathname}`
+  const { url: targetUrl, hash, id: popoverId } = popoverTarget(link.href)
   const prevPopoverElement = document.getElementById(popoverId)
 
   // dont refetch if there's already a popover
@@ -112,6 +109,10 @@ async function mouseEnterHandler(
   }
 
   document.body.appendChild(popoverElement)
+  // Plugins own query-dependent content; core only exposes the preview lifecycle.
+  document.dispatchEvent(new CustomEvent("popover-created", {
+    detail: { container: popoverElement, url: targetUrl.href },
+  }))
   if (activeAnchor !== this) {
     return
   }

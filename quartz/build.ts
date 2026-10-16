@@ -25,6 +25,7 @@ import { randomIdNonSecure } from "./util/random"
 import { ChangeEvent } from "./plugins/types"
 import { minimatch } from "minimatch"
 import { GraphDatabase } from "./util/graphdb"
+import { ancestorFolderPages } from "./util/folderDependencies"
 
 function reportSlugCollisions(content: ProcessedContent[]): void {
   const collisions = detectSlugCollisions(content)
@@ -381,7 +382,12 @@ async function buildQuartzIncremental(argv: Argv, mut: Mutex, clientRefresh: () 
     perf.addEvent("update-graph")
     const prunedVirtualNodes = updateGraphDatabase(graphDb, parsedFiles, deletedFilePaths)
     const afterAffected = graphDb.analyzeImpact(rawIds).allAffected
-    const affectedIds = [...new Set([...beforeAffected, ...afterAffected])].filter(
+    // Existing folder index sources must be reparsed before emission: cached
+    // unchanged pages contain metadata only, so rendering them would erase their body.
+    const folderPages = ancestorFolderPages(
+      [...changedFilePaths, ...deletedFilePaths].map(fp => slugifyFilePath(fp as FilePath)),
+    )
+    const affectedIds = [...new Set([...beforeAffected, ...afterAffected, ...folderPages])].filter(
       (id) => !rawIds.includes(id),
     )
     ctx.affectedSlugs = new Set(affectedIds.map((id) => slugifyFilePath((id + ".md") as FilePath)))
