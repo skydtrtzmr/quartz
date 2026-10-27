@@ -386,9 +386,8 @@ plugins:
       showLabels: false
       restoreScroll: true
     layout:
-      position: beforeBody
-      priority: 4
-      group: pageNavigation
+      position: header
+      priority: 1
   - source: github:quartz-community/breadcrumbs
     enabled: true
     options:
@@ -397,7 +396,6 @@ plugins:
       position: beforeBody
       priority: 5
       condition: not-index
-      group: pageNavigation
   - source: github:quartz-community/comments
     enabled: false
     options:
@@ -570,10 +568,6 @@ plugins:
       component: GlobalGraphOverlay
 layout:
   groups:
-    pageNavigation:
-      priority: 4
-      direction: row
-      gap: 0.5rem
     toolbar:
       priority: 35
       direction: row

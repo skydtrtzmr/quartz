@@ -41,6 +41,14 @@
   }
 }
 
+// 小屏启用历史按钮时，工具排移到标题/搜索下方，并为正文导航留出空间。
+@media (max-width: 800px) {
+  :root:has(.navigation-history-pro) {
+    .darkmode, .readermode, .graph-toggle { top: 3.75rem; }
+    .page-header { padding-top: 2rem; }
+  }
+}
+
 // ===== 左右留白：只改 $sidebar-pad-x 一个值 =====
 // 留白来源（quartz/styles/base.scss）：
 //   ① 侧栏左右 padding 2rem（base.scss:225）—— 窄屏下留白的全部；
