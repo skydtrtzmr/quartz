@@ -32,6 +32,9 @@ import MobileOnly from "../../components/MobileOnly"
 import DesktopOnly from "../../components/DesktopOnly"
 import ConditionalRender from "../../components/ConditionalRender"
 import { createFolderPageSort, normalizeListingSort } from "../../util/listingSort"
+import { sharedPropertiesOptions } from "./shared-properties"
+import { sharedExplorerOptions } from "./shared-explorer"
+import { sharedGraphOptions } from "./shared-graph"
 
 const CONFIG_YAML_PATH = path.join(process.cwd(), "quartz.config.yaml")
 const DEFAULT_CONFIG_YAML_PATH = path.join(process.cwd(), "quartz.config.default.yaml")
@@ -113,7 +116,7 @@ function resolveConfigPath(): string {
   return resolveDefaultConfigPath()
 }
 
-function parseConfigFile(configPath: string): QuartzPluginsJson {
+export function parseConfigFile(configPath: string): QuartzPluginsJson {
   const raw = fs.readFileSync(configPath, "utf-8")
   const config = (
     configPath.endsWith(".yaml") || configPath.endsWith(".yml") ? YAML.parse(raw) : JSON.parse(raw)
@@ -121,8 +124,15 @@ function parseConfigFile(configPath: string): QuartzPluginsJson {
   const listingSort = normalizeListingSort(config.configuration?.listingSort)
   for (const plugin of config.plugins ?? []) {
     const name = extractPluginName(plugin.source)
-    if (name === "explorer-pro") {
-      plugin.options = { ...plugin.options, sortFields: listingSort }
+    if (name === "note-properties-pro") {
+      plugin.options = sharedPropertiesOptions(config.configuration?.properties, plugin.options)
+    } else if (name === "graph-pro") {
+      plugin.options = sharedGraphOptions(config.configuration?.graph, plugin.options)
+    } else if (name === "explorer-pro") {
+      plugin.options = {
+        ...sharedExplorerOptions(config.configuration?.explorer, plugin.options),
+        sortFields: listingSort,
+      }
     } else if (name === "folder-page" || name === "folder-page-pro") {
       plugin.options = { ...plugin.options, sort: createFolderPageSort(listingSort) }
     }

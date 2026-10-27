@@ -1,6 +1,9 @@
 import test, { describe, afterEach } from "node:test"
 import assert from "node:assert"
-import { buildLayoutForEntries, resolveGroups, shouldRegisterProcessing } from "./config-loader"
+import { buildLayoutForEntries, parseConfigFile, resolveGroups, shouldRegisterProcessing } from "./config-loader"
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { componentRegistry } from "../../components/registry"
 import type { QuartzComponent, QuartzComponentConstructor } from "../../components/types"
 import { PluginJsonEntry, LayoutPosition } from "./types"
@@ -10,6 +13,69 @@ const makeComponent = (name: string): QuartzComponent => {
   c.displayName = name
   return c
 }
+
+test("YAML loader injects global property chains only into the pro plugin", () => {
+  const directory = mkdtempSync(join(tmpdir(), "quartz-global-properties-"))
+  try {
+    const file = join(directory, "quartz.config.yaml")
+    writeFileSync(file, `configuration:
+  properties:
+    branches:
+      default: []
+      folders: {tasks: [status, owner]}
+  explorer:
+    hideFiles: true
+    dimensionFolders: false
+    dimensionMaxLevels: 3
+    dimensionMaxValues: 20
+  listingSort:
+    folders: {tasks: {field: priority, order: desc}}
+  graph:
+    defaults: {maxVisibleNodes: 90, expandBatchSize: 7}
+    global: {folders: [tasks], coreAggregationMaxLevels: 3}
+plugins:
+  - source: ../plugins-local/note-properties-pro
+    enabled: true
+    options:
+      includeAll: false
+      excludedProperties: [title]
+  - source: github:quartz-community/note-properties
+    enabled: false
+    options: {includedProperties: [description]}
+  - source: ../plugins-local/explorer-pro
+    enabled: true
+    options: {folderDefaultState: collapsed, excludePathPrefixes: [assets]}
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    options: {configVersion: 2, globalGraph: {linkDistance: 150}}
+  - source: ../plugins-local/graph-pro
+    enabled: true
+    processing: false
+    layout: {position: header, component: GlobalGraphOverlay}
+    options: {configVersion: 2}
+`)
+    const config = parseConfigFile(file)
+    assert.deepStrictEqual(config.plugins[0].options?.properties, config.configuration.properties)
+    assert.deepStrictEqual(config.plugins[0].options?.excludedProperties, ["title"])
+    assert.deepStrictEqual(config.plugins[1].options, { includedProperties: ["description"] })
+    assert.deepStrictEqual(config.plugins[2].options, {
+      ...config.configuration.explorer as object,
+      folderDefaultState: "collapsed",
+      excludePathPrefixes: ["assets"],
+      sortFields: { default: { field: "title", order: "asc" }, folders: { tasks: { field: "priority", order: "desc" } } },
+    })
+    for (const entry of config.plugins.slice(3)) {
+      assert.deepStrictEqual(entry.options?.graphDefaults, { maxVisibleNodes: 90, expandBatchSize: 7 })
+      const global = entry.options?.globalGraph as Record<string, unknown>
+      assert.deepStrictEqual(global.folders, ["tasks"])
+      assert.equal(global.coreAggregationMaxLevels, 3)
+    }
+    assert.equal((config.plugins[3].options?.globalGraph as Record<string, unknown>).linkDistance, 150)
+  } finally {
+    assert.ok(directory.startsWith(join(tmpdir(), "quartz-global-properties-")))
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 const makeConstructor = (name: string): QuartzComponentConstructor => {
   return () => makeComponent(name)

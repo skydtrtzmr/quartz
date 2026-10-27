@@ -81,6 +81,14 @@ export interface AggregationConfiguration {
 }
 
 export interface GlobalConfiguration {
+  /** Business policy shared by graph emitters and all four views. */
+  graph?: {
+    defaults?: GraphBusinessDefaults
+    local?: GraphBusinessDefaults
+    folder?: GraphBusinessDefaults
+    dimension?: GraphBusinessDefaults
+    global?: GraphBusinessDefaults & { folders?: string[]; coreAggregationMaxLevels?: number }
+  }
   pageTitle: string
   pageTitleSuffix?: string
   /** Whether to enable single-page-app style rendering. this prevents flashes of unstyled content and improves smoothness of Quartz */
@@ -99,6 +107,23 @@ export interface GlobalConfiguration {
   baseUrl?: string
   /** Optional shared aggregation configuration; legacy graph options remain valid when absent. */
   aggregation?: AggregationConfiguration
+  /** Shared ordered property display rules. Empty folder chains inherit. */
+  properties?: {
+    folderDepth?: number
+    branches?: {
+      default?: string[]
+      folders?: Record<string, string[]>
+    }
+  }
+  /** Shared explorer display policy; field chains remain folder aggregation rules. */
+  explorer?: {
+    /** Hide file leaves; folders and dynamic categories remain visible. */
+    hideFiles?: boolean
+    dimensionFolders?: boolean
+    dimensionMaxLevels?: number
+    /** Maximum category values per level, not a file or pagination limit. */
+    dimensionMaxValues?: number
+  }
   /** Shared frontmatter sort field for folder pages and the explorer. */
   listingSort?: {
     default?: string | { field: string; order?: "asc" | "desc" }
@@ -114,6 +139,13 @@ export interface GlobalConfiguration {
    * Region Codes: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
    */
   locale: ValidLocale
+}
+
+export interface GraphBusinessDefaults {
+  maxVisibleNodes?: number
+  expandBatchSize?: number
+  loadBatchSize?: number
+  coreMinLinks?: number
 }
 
 export interface QuartzConfig {

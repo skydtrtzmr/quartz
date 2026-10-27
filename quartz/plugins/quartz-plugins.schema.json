@@ -6,6 +6,214 @@
   "required": ["configuration", "plugins"],
   "additionalProperties": false,
   "$defs": {
+    "graphBusiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxVisibleNodes": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 500
+            },
+            "expandBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            },
+            "loadBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "coreMinLinks": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        },
+        "local": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxVisibleNodes": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 500
+            },
+            "expandBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            },
+            "loadBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "coreMinLinks": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        },
+        "folder": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxVisibleNodes": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 500
+            },
+            "expandBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            },
+            "loadBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "coreMinLinks": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        },
+        "dimension": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxVisibleNodes": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 500
+            },
+            "expandBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            },
+            "loadBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "coreMinLinks": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        },
+        "global": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxVisibleNodes": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 500
+            },
+            "expandBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            },
+            "loadBatchSize": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "coreMinLinks": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "folders": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "coreAggregationMaxLevels": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 2
+            }
+          }
+        }
+      }
+    },
+    "explorer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hideFiles": {
+          "type": "boolean",
+          "default": false
+        },
+        "dimensionFolders": {
+          "type": "boolean",
+          "default": false
+        },
+        "dimensionMaxLevels": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2
+        },
+        "dimensionMaxValues": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 20
+        }
+      }
+    },
+    "propertiesChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "folderDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "branches": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "folders": {
+              "type": "object",
+              "description": "Empty folder chains inherit from ancestors, then default.",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "listingSortRule": {
       "oneOf": [
         { "type": "string", "pattern": "\\S" },
@@ -253,6 +461,9 @@
           "description": "Analytics configuration (null to disable)"
         },
         "aggregation": { "$ref": "#/$defs/aggregation" },
+        "properties": { "$ref": "#/$defs/propertiesChain" },
+        "explorer": { "$ref": "#/$defs/explorer" },
+        "graph": { "$ref": "#/$defs/graphBusiness" },
         "ignorePatterns": {
           "type": "array",
           "items": {

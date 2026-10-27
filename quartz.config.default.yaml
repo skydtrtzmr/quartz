@@ -9,6 +9,50 @@ configuration:
     provider: plausible
   locale: en-US
   baseUrl: quartz.jzhao.xyz
+  # 图谱业务参数统一放在 configuration.graph；渲染/力导向参数仍在 graph-pro.options 的四种视图段。
+  # 生效顺序：插件内置默认值 → defaults 公共值 → local/folder/dimension/global 的显式覆盖。
+  # 四类视图均显式配置；视图自己的值优先，修改 defaults 不会覆盖已填写的视图值。
+  # Go API 的 graph.defaults/local/folder/dimension/global 可分别查询和修改这些业务参数。
+  graph:
+    defaults:
+      # 首屏节点预算（含聚合节点等），不是整个图谱的硬上限；后续仍可分批加载。整数 >= 1，默认 500。
+      # 与插件 globalGraph.coreNodeLimit 是不同参数，不能当作“核心节点上限”。
+      maxVisibleNodes: 500
+      # 每个聚合节点展开/继续加载的批量大小。整数 >= 1，默认 20。
+      expandBatchSize: 20
+      # 非聚合节点的展开/继续加载批量大小。整数 >= 1，默认 100。
+      loadBatchSize: 100
+      # 主体节点最小真实关联数。整数 >= 0，默认 0（允许孤立内容节点）。
+      # 主体筛选用于全局、文件夹和动态分类图谱；内容页局部图谱不按主体集合筛选。
+      coreMinLinks: 0
+    # 内容页局部图谱：独立配置以下业务参数。
+    local:
+      maxVisibleNodes: 500
+      expandBatchSize: 20
+      loadBatchSize: 100
+      coreMinLinks: 0  # 支持该键，但局部视图不使用主体节点筛选。
+    # 文件夹页图谱：独立配置；删除某个键才会继承 defaults。
+    folder:
+      maxVisibleNodes: 500
+      expandBatchSize: 20
+      loadBatchSize: 100
+      coreMinLinks: 0
+    # 动态分类页图谱（字段 → 取值对应的维度页）。
+    dimension:
+      maxVisibleNodes: 500
+      expandBatchSize: 20
+      loadBatchSize: 100
+      coreMinLinks: 0
+    global:
+      # 全局图谱的独立业务参数。
+      maxVisibleNodes: 500
+      expandBatchSize: 20
+      loadBatchSize: 100
+      coreMinLinks: 0
+      # 仅全局图谱：主体文件夹白名单，相对内容根目录的路径数组；[] 表示不限制文件夹。
+      folders: ["项目"]
+      # 仅全局图谱：核心聚合使用共享字段链的前 N 层，文件夹分区不计入层数。整数 >= 1，默认 2。
+      coreAggregationMaxLevels: 2
   ignorePatterns:
     - private
     - templates
@@ -162,8 +206,8 @@ plugins:
         focusOnHover: false
         enableRadial: false
       globalGraph:
+        # 主体文件夹及核心聚合层数见 configuration.graph.global，不在插件 options 下填写。
         enabled: true
-        folders: [项目]
         expandCoresOnRegionOpen: false
         coreNodeLimit: 50
         countLabelMin: 7
