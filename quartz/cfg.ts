@@ -81,13 +81,23 @@ export interface AggregationConfiguration {
 }
 
 export interface GlobalConfiguration {
-  /** Business policy shared by graph emitters and all four views. */
+  /** All graph settings live here; the loader injects them into every graph component/emitter. */
   graph?: {
-    defaults?: GraphBusinessDefaults
-    local?: GraphBusinessDefaults
-    folder?: GraphBusinessDefaults
-    dimension?: GraphBusinessDefaults
-    global?: GraphBusinessDefaults & { folders?: string[]; coreAggregationMaxLevels?: number }
+    precomputeLocal?: boolean
+    defaults?: GraphDisplaySettings
+    local?: GraphDisplaySettings & { depth?: number }
+    folder?: GraphDisplaySettings
+    dimension?: GraphDisplaySettings
+    global?: GraphDisplaySettings & {
+      enabled?: boolean
+      folders?: string[]
+      coreNodeLimit?: number
+      coreAggregationMaxLevels?: number
+      expandCoresOnRegionOpen?: boolean
+      filterNonCoreNodes?: boolean
+      colorBy?: string
+      countLabelMin?: number
+    }
   }
   pageTitle: string
   pageTitleSuffix?: string
@@ -139,6 +149,26 @@ export interface GlobalConfiguration {
    * Region Codes: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
    */
   locale: ValidLocale
+}
+
+export interface GraphDisplaySettings extends GraphBusinessDefaults {
+  drag?: boolean
+  zoom?: boolean
+  scale?: number
+  repelForce?: number
+  centerForce?: number
+  linkDistance?: number
+  fontSize?: number
+  opacityScale?: number
+  showTags?: boolean
+  removeTags?: string[]
+  focusOnHover?: boolean
+  enableRadial?: boolean
+  showAggregatedNodeLinks?: boolean
+  showArrows?: boolean
+  showBadge?: boolean
+  startCollapsed?: boolean
+  countLabelMaxDisplay?: number
 }
 
 export interface GraphBusinessDefaults {

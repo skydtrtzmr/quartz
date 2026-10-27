@@ -32,7 +32,9 @@ test("YAML loader injects global property chains only into the pro plugin", () =
     folders: {tasks: {field: priority, order: desc}}
   graph:
     defaults: {maxVisibleNodes: 90, expandBatchSize: 7}
-    global: {folders: [tasks], coreAggregationMaxLevels: 3}
+    precomputeLocal: false
+    local: {depth: 2, showTags: false}
+    global: {folders: [tasks], coreAggregationMaxLevels: 3, linkDistance: 150}
 plugins:
   - source: ../plugins-local/note-properties-pro
     enabled: true
@@ -47,12 +49,10 @@ plugins:
     options: {folderDefaultState: collapsed, excludePathPrefixes: [assets]}
   - source: ../plugins-local/graph-pro
     enabled: true
-    options: {configVersion: 2, globalGraph: {linkDistance: 150}}
   - source: ../plugins-local/graph-pro
     enabled: true
     processing: false
     layout: {position: header, component: GlobalGraphOverlay}
-    options: {configVersion: 2}
 `)
     const config = parseConfigFile(file)
     assert.deepStrictEqual(config.plugins[0].options?.properties, config.configuration.properties)
@@ -69,6 +69,8 @@ plugins:
       const global = entry.options?.globalGraph as Record<string, unknown>
       assert.deepStrictEqual(global.folders, ["tasks"])
       assert.equal(global.coreAggregationMaxLevels, 3)
+      assert.deepStrictEqual(entry.options?.graph, { precomputeLocal: false })
+      assert.deepStrictEqual(entry.options?.localGraph, { depth: 2, showTags: false })
     }
     assert.equal((config.plugins[3].options?.globalGraph as Record<string, unknown>).linkDistance, 150)
   } finally {

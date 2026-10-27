@@ -3,158 +3,12 @@
   "title": "Quartz Plugins Configuration Schema",
   "description": "Schema for validating quartz.plugins.json configuration files",
   "type": "object",
-  "required": ["configuration", "plugins"],
+  "required": [
+    "configuration",
+    "plugins"
+  ],
   "additionalProperties": false,
   "$defs": {
-    "graphBusiness": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "defaults": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "maxVisibleNodes": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 500
-            },
-            "expandBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 20
-            },
-            "loadBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 100
-            },
-            "coreMinLinks": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
-          }
-        },
-        "local": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "maxVisibleNodes": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 500
-            },
-            "expandBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 20
-            },
-            "loadBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 100
-            },
-            "coreMinLinks": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
-          }
-        },
-        "folder": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "maxVisibleNodes": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 500
-            },
-            "expandBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 20
-            },
-            "loadBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 100
-            },
-            "coreMinLinks": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
-          }
-        },
-        "dimension": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "maxVisibleNodes": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 500
-            },
-            "expandBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 20
-            },
-            "loadBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 100
-            },
-            "coreMinLinks": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
-          }
-        },
-        "global": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "maxVisibleNodes": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 500
-            },
-            "expandBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 20
-            },
-            "loadBatchSize": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 100
-            },
-            "coreMinLinks": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "folders": {
-              "type": "array",
-              "uniqueItems": true,
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "coreAggregationMaxLevels": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 2
-            }
-          }
-        }
-      }
-    },
     "explorer": {
       "type": "object",
       "additionalProperties": false,
@@ -216,66 +70,279 @@
     },
     "listingSortRule": {
       "oneOf": [
-        { "type": "string", "pattern": "\\S" },
+        {
+          "type": "string",
+          "pattern": "\\S"
+        },
         {
           "type": "object",
-          "required": ["field"],
+          "required": [
+            "field"
+          ],
           "additionalProperties": false,
           "properties": {
-            "field": { "type": "string", "pattern": "\\S" },
-            "order": { "type": "string", "enum": ["asc", "desc"], "default": "asc" }
+            "field": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "order": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc"
+            }
           }
         }
       ]
     },
     "folderAggregationRule": {
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "folder" },
-        "depth": { "type": "integer", "minimum": 1, "default": 1 }
+        "type": {
+          "const": "folder"
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
       }
     },
     "aggregationRule": {
       "oneOf": [
-        { "$ref": "#/$defs/folderAggregationRule" },
+        {
+          "$ref": "#/$defs/folderAggregationRule"
+        },
         {
           "type": "object",
-          "required": ["type", "field"],
+          "required": [
+            "type",
+            "field"
+          ],
           "additionalProperties": false,
           "properties": {
-            "type": { "const": "field" },
-            "field": { "type": "string", "pattern": "\\S" }
+            "type": {
+              "const": "field"
+            },
+            "field": {
+              "type": "string",
+              "pattern": "\\S"
+            }
           }
         }
       ]
     },
     "aggregationRuleChain": {
       "type": "array",
-      "items": { "$ref": "#/$defs/aggregationRule" }
+      "items": {
+        "$ref": "#/$defs/aggregationRule"
+      }
     },
     "aggregation": {
       "type": "object",
-      "required": ["root"],
+      "required": [
+        "root"
+      ],
       "additionalProperties": false,
       "description": "Shared aggregation input, compiled by aggregation-pro into static/aggregation.json.",
       "properties": {
-        "minGroupSize": { "type": "integer", "minimum": 2, "default": 2 },
-        "root": { "$ref": "#/$defs/folderAggregationRule" },
+        "minGroupSize": {
+          "type": "integer",
+          "minimum": 2,
+          "default": 2
+        },
+        "root": {
+          "$ref": "#/$defs/folderAggregationRule"
+        },
         "branches": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "default": { "$ref": "#/$defs/aggregationRuleChain" },
+            "default": {
+              "$ref": "#/$defs/aggregationRuleChain"
+            },
             "folders": {
               "type": "object",
               "description": "Content-relative directory paths. Missing keys inherit from ancestors, then default; [] explicitly stops inheritance and further grouping.",
-              "additionalProperties": { "$ref": "#/$defs/aggregationRuleChain" }
+              "additionalProperties": {
+                "$ref": "#/$defs/aggregationRuleChain"
+              }
             }
           }
         }
       }
+    },
+    "graphConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/graphCommon"
+        },
+        "local": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/graphDisplay"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "integer"
+                }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        "folder": {
+          "$ref": "#/$defs/graphCommon"
+        },
+        "dimension": {
+          "$ref": "#/$defs/graphCommon"
+        },
+        "global": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/graphDisplay"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "folders": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "coreAggregationMaxLevels": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 2
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "expandCoresOnRegionOpen": {
+                  "type": "boolean"
+                },
+                "filterNonCoreNodes": {
+                  "type": "boolean"
+                },
+                "coreNodeLimit": {
+                  "type": "number"
+                },
+                "countLabelMin": {
+                  "type": "number"
+                },
+                "colorBy": {
+                  "type": "string"
+                }
+              }
+            }
+          ],
+          "unevaluatedProperties": false
+        },
+        "precomputeLocal": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "graphDisplay": {
+      "type": "object",
+      "properties": {
+        "maxVisibleNodes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 500
+        },
+        "expandBatchSize": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 20
+        },
+        "loadBatchSize": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100
+        },
+        "coreMinLinks": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "drag": {
+          "type": "boolean"
+        },
+        "zoom": {
+          "type": "boolean"
+        },
+        "showTags": {
+          "type": "boolean"
+        },
+        "focusOnHover": {
+          "type": "boolean"
+        },
+        "enableRadial": {
+          "type": "boolean"
+        },
+        "showAggregatedNodeLinks": {
+          "type": "boolean"
+        },
+        "showArrows": {
+          "type": "boolean"
+        },
+        "showBadge": {
+          "type": "boolean"
+        },
+        "startCollapsed": {
+          "type": "boolean"
+        },
+        "scale": {
+          "type": "number"
+        },
+        "repelForce": {
+          "type": "number"
+        },
+        "centerForce": {
+          "type": "number"
+        },
+        "linkDistance": {
+          "type": "number"
+        },
+        "fontSize": {
+          "type": "number"
+        },
+        "opacityScale": {
+          "type": "number"
+        },
+        "countLabelMaxDisplay": {
+          "type": "number"
+        },
+        "removeTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "graphCommon": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/graphDisplay"
+        }
+      ],
+      "unevaluatedProperties": false
     }
   },
   "properties": {
@@ -285,7 +352,12 @@
     },
     "configuration": {
       "type": "object",
-      "required": ["pageTitle", "enableSPA", "locale", "theme"],
+      "required": [
+        "pageTitle",
+        "enableSPA",
+        "locale",
+        "theme"
+      ],
       "additionalProperties": false,
       "properties": {
         "pageTitle": {
@@ -313,10 +385,14 @@
           "additionalProperties": false,
           "description": "Frontmatter field and optional direction used to order folder listings and explorer children; folder paths inherit from ancestors.",
           "properties": {
-            "default": { "$ref": "#/$defs/listingSortRule" },
+            "default": {
+              "$ref": "#/$defs/listingSortRule"
+            },
             "folders": {
               "type": "object",
-              "additionalProperties": { "$ref": "#/$defs/listingSortRule" }
+              "additionalProperties": {
+                "$ref": "#/$defs/listingSortRule"
+              }
             }
           }
         },
@@ -330,12 +406,20 @@
         },
         "theme": {
           "type": "object",
-          "required": ["fontOrigin", "cdnCaching", "typography", "colors"],
+          "required": [
+            "fontOrigin",
+            "cdnCaching",
+            "typography",
+            "colors"
+          ],
           "additionalProperties": false,
           "properties": {
             "fontOrigin": {
               "type": "string",
-              "enum": ["googleFonts", "local"],
+              "enum": [
+                "googleFonts",
+                "local"
+              ],
               "description": "Source of fonts"
             },
             "cdnCaching": {
@@ -362,7 +446,10 @@
             },
             "colors": {
               "type": "object",
-              "required": ["lightMode", "darkMode"],
+              "required": [
+                "lightMode",
+                "darkMode"
+              ],
               "additionalProperties": false,
               "properties": {
                 "lightMode": {
@@ -455,15 +542,28 @@
         },
         "analytics": {
           "oneOf": [
-            { "type": "null" },
-            { "type": "object", "description": "Analytics configuration" }
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "description": "Analytics configuration"
+            }
           ],
           "description": "Analytics configuration (null to disable)"
         },
-        "aggregation": { "$ref": "#/$defs/aggregation" },
-        "properties": { "$ref": "#/$defs/propertiesChain" },
-        "explorer": { "$ref": "#/$defs/explorer" },
-        "graph": { "$ref": "#/$defs/graphBusiness" },
+        "aggregation": {
+          "$ref": "#/$defs/aggregation"
+        },
+        "properties": {
+          "$ref": "#/$defs/propertiesChain"
+        },
+        "explorer": {
+          "$ref": "#/$defs/explorer"
+        },
+        "graph": {
+          "$ref": "#/$defs/graphConfiguration"
+        },
         "ignorePatterns": {
           "type": "array",
           "items": {
@@ -478,7 +578,10 @@
       "description": "Array of plugin configurations",
       "items": {
         "type": "object",
-        "required": ["source", "enabled"],
+        "required": [
+          "source",
+          "enabled"
+        ],
         "additionalProperties": false,
         "properties": {
           "source": {
@@ -489,7 +592,9 @@
               },
               {
                 "type": "object",
-                "required": ["repo"],
+                "required": [
+                  "repo"
+                ],
                 "additionalProperties": false,
                 "properties": {
                   "name": {
@@ -538,7 +643,14 @@
             "properties": {
               "position": {
                 "type": "string",
-                "enum": ["left", "right", "beforeBody", "afterBody", "header", "footer"],
+                "enum": [
+                  "left",
+                  "right",
+                  "beforeBody",
+                  "afterBody",
+                  "header",
+                  "footer"
+                ],
                 "description": "Layout position"
               },
               "priority": {
@@ -551,7 +663,11 @@
               },
               "display": {
                 "type": "string",
-                "enum": ["all", "mobile-only", "desktop-only"],
+                "enum": [
+                  "all",
+                  "mobile-only",
+                  "desktop-only"
+                ],
                 "description": "Display mode"
               },
               "condition": {
